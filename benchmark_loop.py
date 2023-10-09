@@ -35,10 +35,10 @@ def run_subprocess_example():
     # print(result)
     # print(result.stdout)
 
-# def generate_tpch(duckdb_location, ):
-#     result = subprocess.run([duckdb_location, "-c","""SELECT 42;"""], capture_output=True, text=True)
-#     # print(result)
-#     print(result.stdout)
+def generate_tpch(duckdb_location, scale_factor):
+    result = subprocess.run([duckdb_location, "-c",f"""call dbgen(sf={scale_factor});"""], capture_output=True, text=True)
+    # print(result)
+    # print(result.stdout)
 
 
 if __name__ == '__main__':
@@ -108,8 +108,12 @@ if __name__ == '__main__':
     number = 1
 
     for filename in cli_filenames:
-        print(function_name,':',timeit.repeat(f'{function_name}(".//{filename}")', setup=f'from __main__ import {function_name}',repeat=repeat, number=number))
+        print(function_name, filename, ':',timeit.repeat(f'{function_name}(".//{filename}")', setup=f'from __main__ import {function_name}',repeat=repeat, number=number))
 
     function_name = 'run_subprocess_example'
     print(function_name,':',timeit.repeat(f'{function_name}()', setup=f'from __main__ import {function_name}',repeat=repeat, number=number))
 
+    function_name = 'generate_tpch'
+    scale_factor = 0.01
+    for filename in cli_filenames:
+        print(function_name, filename, ':',timeit.repeat(f'{function_name}(".//{filename}", {scale_factor})', setup=f'from __main__ import {function_name}',repeat=repeat, number=number))

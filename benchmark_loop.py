@@ -24,22 +24,41 @@ def download_cli_versions(version_list):
         os.rename('duckdb', unzipped_filename)
         os.chmod(unzipped_filename, mode=stat.S_IEXEC)
 
-def run_duckdb_example(duckdb_location):
-    result = subprocess.run([duckdb_location, "-c","""SELECT 42;"""], capture_output=True, text=True)
+def delete_database(filename):
+    db_filename = filename + '.duckdb'
+    try:
+        os.remove(db_filename)
+    except OSError:
+        pass
+    
+    wal_filename = filename + '.duckdb.wal'
+    try:
+        os.remove(wal_filename)
+    except OSError:
+        pass
+
+def run_duckdb_example(duckdb_location, filename=':memory:'):
+    result = subprocess.run([duckdb_location, filename, "-c","""SELECT version();"""], capture_output=True, text=True)
     # print(result)
     print(result.stdout)
 
 def run_subprocess_example():
     result = subprocess.run(['ls'], capture_output=True, text=True)
-
-    # print(result)
     # print(result.stdout)
 
-def generate_tpch(duckdb_location, scale_factor):
-    result = subprocess.run([duckdb_location, "-c",f"""call dbgen(sf={scale_factor});"""], capture_output=True, text=True)
-    # print(result)
+def generate_tpch(duckdb_location, filename=':memory:', scale_factor=0.1):
+    delete_database(duckdb_location) # .duckdb added within the function
+    result = subprocess.run([duckdb_location, filename, "-c",f"""call dbgen(sf={scale_factor});"""], capture_output=True, text=True)
     # print(result.stdout)
 
+def run_tpch(duckdb_location, filename):
+    tpch_query_count = 23
+    # Run all TPC-H queries within the same connection
+    tpch_command = ''
+    for q in range(1,tpch_query_count):
+        tpch_command += f'PRAGMA tpch({q}); '
+    result = subprocess.run([duckdb_location, filename, "-c", tpch_command], capture_output=True, text=True)
+    # print(result.stdout)
 
 if __name__ == '__main__':
     import subprocess
@@ -79,9 +98,6 @@ if __name__ == '__main__':
         '0.9.0': {'date':datetime.strptime('2022-09-26','%Y-%m-%d'),'osx-universal':True}
     }
 
-    # Linux CLI versions
-    # versions = ['0.2.9', '0.3.0', '0.3.1', '0.3.2', '0.3.3', '0.3.4', '0.4.0', '0.5.1', '0.6.1', '0.7.1', '0.8.1', '0.9.0']
-
     my_os = platform.platform()
     my_processor_type = platform.processor()
 
@@ -103,17 +119,44 @@ if __name__ == '__main__':
 
     print(cli_filenames)
 
-    function_name = 'run_duckdb_example'
-    repeat = 5
-    number = 1
-
     for filename in cli_filenames:
-        print(function_name, filename, ':',timeit.repeat(f'{function_name}(".//{filename}")', setup=f'from __main__ import {function_name}',repeat=repeat, number=number))
+        delete_database(filename)
+
+    repeat = 3
+    number = 1
+    function_name = 'run_duckdb_example'
+    for filename in cli_filenames:
+        print(function_name, filename, ':',timeit.repeat(f'{function_name}(".//{filename}", "{filename}.duckdb")', setup=f'from __main__ import {function_name}',repeat=repeat, number=number))
 
     function_name = 'run_subprocess_example'
     print(function_name,':',timeit.repeat(f'{function_name}()', setup=f'from __main__ import {function_name}',repeat=repeat, number=number))
 
-    function_name = 'generate_tpch'
-    scale_factor = 0.01
+    scale_factor = 0.1
     for filename in cli_filenames:
-        print(function_name, filename, ':',timeit.repeat(f'{function_name}(".//{filename}", {scale_factor})', setup=f'from __main__ import {function_name}',repeat=repeat, number=number))
+        function_name = 'generate_tpch'
+        print(function_name, filename, ':',timeit.repeat(f'{function_name}(".//{filename}", "{filename}.duckdb", {scale_factor})', setup=f'from __main__ import {function_name}',repeat=repeat, number=number))
+
+        function_name = 'run_tpch'
+        print(function_name, filename, ':',timeit.repeat(f'{function_name}(".//{filename}", "{filename}.duckdb")', setup=f'from __main__ import {function_name}',repeat=repeat, number=number))
+        
+    # TODO: Run (multiple SF's of) TPCH as a test
+    # TODO: Set up SQLite to save the results (Or just use JSON?)
+    #           Need to pass in a scenario name to each function for logging purposes
+    # TODO: Basic plots of the results (from SQLite? More repeatable / analyzable after the fact)
+    # TODO: Compare Python and CLI
+    # Benchmark types:
+    #       Speed of TPC-H
+    #       Scale of TPC-H that will complete
+    #       TPC-H on dataframes
+    #           Pandas
+    #           Arrow
+    #       TPC-H on Parquet
+    #           Loading time
+    #           Execution time
+    #       Initial connection latency
+    #           In memory DB
+    #           Small file DB
+    #           Time to open a large database
+    #       Small query after connection already made?
+    #       Single threaded performance (multithreaded by default)?
+    #       H2O.ai?

@@ -53,8 +53,8 @@ def generate_tpch(duckdb_location, filename=':memory:', scale_factor=0.1):
 
 def run_tpch(duckdb_location, filename):
     tpch_query_count = 23
-    # Run all TPC-H queries within the same connection
-    tpch_command = ''
+    # Run all TPC-H queries within the same connection and don't stream the results back over stdout
+    tpch_command = '.mode trash ; '
     for q in range(1,tpch_query_count):
         tpch_command += f'PRAGMA tpch({q}); '
     result = subprocess.run([duckdb_location, filename, "-c", tpch_command], capture_output=True, text=True)

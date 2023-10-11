@@ -2,6 +2,7 @@ from urllib.request import urlretrieve
 import shutil
 import os
 import stat
+import sqlite3
 
 def download_cli_versions(version_list):
     # https://github.com/duckdb/duckdb/releases/download/v0.9.0/duckdb_cli-osx-universal.zip
@@ -36,6 +37,8 @@ def delete_database(filename):
         os.remove(wal_filename)
     except OSError:
         pass
+
+
 
 def run_duckdb_example(duckdb_location, filename=':memory:'):
     result = subprocess.run([duckdb_location, filename, "-c","""SELECT version();"""], capture_output=True, text=True)
@@ -131,19 +134,21 @@ if __name__ == '__main__':
     function_name = 'run_subprocess_example'
     print(function_name,':',timeit.repeat(f'{function_name}()', setup=f'from __main__ import {function_name}',repeat=repeat, number=number))
 
-    scale_factor = 0.1
-    for filename in cli_filenames:
-        function_name = 'generate_tpch'
-        print(function_name, filename, ':',timeit.repeat(f'{function_name}(".//{filename}", "{filename}.duckdb", {scale_factor})', setup=f'from __main__ import {function_name}',repeat=repeat, number=number))
+    scale_factors = [0.01, 0.1]
+    for scale_factor in scale_factors:
+        for filename in cli_filenames:
+            function_name = 'generate_tpch'
+            print(function_name, filename, ':',timeit.repeat(f'{function_name}(".//{filename}", "{filename}.duckdb", {scale_factor})', setup=f'from __main__ import {function_name}',repeat=repeat, number=number))
 
-        function_name = 'run_tpch'
-        print(function_name, filename, ':',timeit.repeat(f'{function_name}(".//{filename}", "{filename}.duckdb")', setup=f'from __main__ import {function_name}',repeat=repeat, number=number))
-        
+            function_name = 'run_tpch'
+            print(function_name, filename, ':',timeit.repeat(f'{function_name}(".//{filename}", "{filename}.duckdb")', setup=f'from __main__ import {function_name}',repeat=repeat, number=number))
+            
     # TODO: Run (multiple SF's of) TPCH as a test
     # TODO: Set up SQLite to save the results (Or just use JSON?)
     #           Need to pass in a scenario name to each function for logging purposes
     # TODO: Basic plots of the results (from SQLite? More repeatable / analyzable after the fact)
     # TODO: Compare Python and CLI
+    # TODO: Compare Wasm and native
     # Benchmark types:
     #       Speed of TPC-H
     #       Scale of TPC-H that will complete

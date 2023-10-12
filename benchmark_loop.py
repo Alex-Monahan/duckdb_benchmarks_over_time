@@ -38,7 +38,21 @@ def delete_database(filename):
     except OSError:
         pass
 
+def duckdb_timeit(function_name, filename, parameters=None, repeat=3, number=1):
+    function_call = f'{function_name}(".//{filename}"'
+    if parameters is None or len(parameters) == 0:
+        function_call += ')'
+    else:
+        for p in parameters:
+            if type(p) == str:
+                function_call += ', "' + p + '"'
+            else:
+                function_call += ', ' + str(p)
+        function_call += ')'
+    timing_results = timeit.repeat(function_call, setup=f'from __main__ import {function_name}',repeat=repeat, number=number)
+    print(function_name, filename, ':', timing_results)
 
+    return timing_results # may not be needed
 
 def run_duckdb_example(duckdb_location, filename=':memory:'):
     result = subprocess.run([duckdb_location, filename, "-c","""SELECT version();"""], capture_output=True, text=True)
@@ -129,21 +143,22 @@ if __name__ == '__main__':
     number = 1
     function_name = 'run_duckdb_example'
     for filename in cli_filenames:
-        print(function_name, filename, ':',timeit.repeat(f'{function_name}(".//{filename}", "{filename}.duckdb")', setup=f'from __main__ import {function_name}',repeat=repeat, number=number))
+        duckdb_timeit(function_name, filename, [f'{filename}.duckdb'], repeat, number)
 
+    # Used to measure the overhead of kicking off a subprocess from Python
     function_name = 'run_subprocess_example'
+    # Keeping old format since it doesn't match the function signature of kicking off DuckDB
     print(function_name,':',timeit.repeat(f'{function_name}()', setup=f'from __main__ import {function_name}',repeat=repeat, number=number))
 
-    scale_factors = [0.01, 0.1]
+    scale_factors = [0.01]
     for scale_factor in scale_factors:
         for filename in cli_filenames:
             function_name = 'generate_tpch'
-            print(function_name, filename, ':',timeit.repeat(f'{function_name}(".//{filename}", "{filename}.duckdb", {scale_factor})', setup=f'from __main__ import {function_name}',repeat=repeat, number=number))
+            duckdb_timeit(function_name, filename, [f'{filename}.duckdb', scale_factor], repeat, number)
 
             function_name = 'run_tpch'
-            print(function_name, filename, ':',timeit.repeat(f'{function_name}(".//{filename}", "{filename}.duckdb")', setup=f'from __main__ import {function_name}',repeat=repeat, number=number))
+            duckdb_timeit(function_name, filename, [f'{filename}.duckdb'], repeat, number)
             
-    # TODO: Run (multiple SF's of) TPCH as a test
     # TODO: Set up SQLite to save the results (Or just use JSON?)
     #           Need to pass in a scenario name to each function for logging purposes
     # TODO: Basic plots of the results (from SQLite? More repeatable / analyzable after the fact)

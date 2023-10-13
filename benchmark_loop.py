@@ -3,6 +3,7 @@ import shutil
 import os
 import stat
 from SQLiteLogger import SQLiteLogger
+import json
 
 def download_cli_versions(version_list):
     # https://github.com/duckdb/duckdb/releases/download/v0.9.0/duckdb_cli-osx-universal.zip
@@ -52,7 +53,7 @@ def duckdb_timeit(logger, function_name, filename, parameters=None, repeat=3, nu
     timing_results = timeit.repeat(function_call, setup=f'from __main__ import {function_name}',repeat=repeat, number=number)
     print(function_name, filename, ':', timing_results)
     # [(repeat_id, benchmark, scenario, time, ), ]
-    data = [(i, function_name, str([filename] + parameters), time, ) for i, time in enumerate(timing_results)]
+    data = [(i, function_name, json.dumps([filename] + parameters), time, ) for i, time in enumerate(timing_results)]
     print(data)
     logger.log(data)
     logger.pprint(logger.get_results())

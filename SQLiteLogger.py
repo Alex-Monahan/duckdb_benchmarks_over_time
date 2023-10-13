@@ -21,7 +21,7 @@ class SQLiteLogger():
                 run_id int,
                 repeat_id int,
                 benchmark varchar,
-                scenario varchar,
+                scenario json,
                 time float 
             )            
         """)
@@ -58,10 +58,11 @@ class SQLiteLogger():
 
 if __name__ == '__main__':
     logger = SQLiteLogger(sqlite_filename='sqlite_test.db', delete_file=False)
+    import json
 
     data = [
-        ('tpch', 1, '[0.01]', .123),
-        ('tpch', 1, '[0.1]', .1234)
+        ('tpch', 1, json.dumps([0.01]), .123),
+        ('tpch', 1, json.dumps([0.1]), .1234)
     ]
 
     logger.log(data)

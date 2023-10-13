@@ -2,7 +2,7 @@ from urllib.request import urlretrieve
 import shutil
 import os
 import stat
-import sqlite3
+from SQLiteLogger import SQLiteLogger
 
 def download_cli_versions(version_list):
     # https://github.com/duckdb/duckdb/releases/download/v0.9.0/duckdb_cli-osx-universal.zip
@@ -38,7 +38,7 @@ def delete_database(filename):
     except OSError:
         pass
 
-def duckdb_timeit(function_name, filename, parameters=None, repeat=3, number=1):
+def duckdb_timeit(logger, function_name, filename, parameters=None, repeat=3, number=1):
     function_call = f'{function_name}(".//{filename}"'
     if parameters is None or len(parameters) == 0:
         function_call += ')'
@@ -51,6 +51,11 @@ def duckdb_timeit(function_name, filename, parameters=None, repeat=3, number=1):
         function_call += ')'
     timing_results = timeit.repeat(function_call, setup=f'from __main__ import {function_name}',repeat=repeat, number=number)
     print(function_name, filename, ':', timing_results)
+    # [(repeat_id, benchmark, scenario, time, ), ]
+    data = [(i, function_name, str([filename] + parameters), time, ) for i, time in enumerate(timing_results)]
+    print(data)
+    logger.log(data)
+    logger.pprint(logger.get_results())
 
     return timing_results # may not be needed
 
@@ -82,6 +87,8 @@ if __name__ == '__main__':
     import timeit
     from datetime import datetime
     import platform
+
+    logger = SQLiteLogger('benchmark_log.db', delete_file=True)
 
     # MacOS with arm64 support versions:
     versions = {
@@ -143,7 +150,7 @@ if __name__ == '__main__':
     number = 1
     function_name = 'run_duckdb_example'
     for filename in cli_filenames:
-        duckdb_timeit(function_name, filename, [f'{filename}.duckdb'], repeat, number)
+        duckdb_timeit(logger, function_name, filename, [f'{filename}.duckdb'], repeat, number)
 
     # Used to measure the overhead of kicking off a subprocess from Python
     function_name = 'run_subprocess_example'
@@ -154,11 +161,13 @@ if __name__ == '__main__':
     for scale_factor in scale_factors:
         for filename in cli_filenames:
             function_name = 'generate_tpch'
-            duckdb_timeit(function_name, filename, [f'{filename}.duckdb', scale_factor], repeat, number)
+            duckdb_timeit(logger, function_name, filename, [f'{filename}.duckdb', scale_factor], repeat, number)
 
             function_name = 'run_tpch'
-            duckdb_timeit(function_name, filename, [f'{filename}.duckdb'], repeat, number)
+            duckdb_timeit(logger, function_name, filename, [f'{filename}.duckdb'], repeat, number)
             
+    logger.pprint(logger.get_results())
+
     # TODO: Set up SQLite to save the results (Or just use JSON?)
     #           Need to pass in a scenario name to each function for logging purposes
     # TODO: Basic plots of the results (from SQLite? More repeatable / analyzable after the fact)

@@ -1,2 +1,5 @@
 /benchmark_env
 duckdb_*
+*.db
+*.pyc
+.DS_Store

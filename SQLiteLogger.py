@@ -51,7 +51,7 @@ class SQLiteLogger():
     def pprint(self, results):
         print_string = '[' + '\n'
         for row in results:
-            print_string += '\t' + str(row) + '\n'
+            print_string += '\t' + str(row) + ',\n'
         print_string += ']' + '\n'
         print(print_string)
 
@@ -70,3 +70,10 @@ if __name__ == '__main__':
     results = logger.get_results()
 
     logger.pprint(results)
+
+    # Test exception syntax
+    # try:
+    #     raise Exception('this is an exception')
+    # except Exception as e:
+    #     import traceback
+    #     traceback.print_exc()

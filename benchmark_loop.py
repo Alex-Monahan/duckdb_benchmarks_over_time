@@ -39,26 +39,46 @@ def delete_database(filename):
     except OSError:
         pass
 
-def duckdb_timeit(logger, function_name, filename, parameters=None, repeat=3, number=1):
-    function_call = f'{function_name}(".//{filename}"'
-    if parameters is None or len(parameters) == 0:
-        function_call += ')'
-    else:
-        for p in parameters:
-            if type(p) == str:
-                function_call += ', "' + p + '"'
-            else:
-                function_call += ', ' + str(p)
-        function_call += ')'
-    timing_results = timeit.repeat(function_call, setup=f'from __main__ import {function_name}',repeat=repeat, number=number)
-    print(function_name, filename, ':', timing_results)
-    # [(repeat_id, benchmark, scenario, time, ), ]
-    data = [(i, function_name, json.dumps([filename] + parameters), time, ) for i, time in enumerate(timing_results)]
-    print(data)
-    logger.log(data)
-    logger.pprint(logger.get_results())
+    tmp_filename = filename + '.duckdb.tmp'
+    try:
+        shutil.rmtree(tmp_filename)
+    except OSError:
+        pass
 
-    return timing_results # may not be needed
+def duckdb_timeit(logger, function_name, filename, parameters=None, repeat=3, number=1):
+    try:
+        
+        
+        function_call = f'{function_name}(".//{filename}"'
+        if parameters is None or len(parameters) == 0:
+            function_call += ')'
+        else:
+            for p in parameters:
+                if type(p) == str:
+                    function_call += ', "' + p + '"'
+                else:
+                    function_call += ', ' + str(p)
+            function_call += ')'
+        timing_results = timeit.repeat(function_call, setup=f'from __main__ import {function_name}',repeat=repeat, number=number)
+        # [(repeat_id, benchmark, scenario, time, ), ]
+        data = [(i, function_name, json.dumps([filename] + parameters), time, ) for i, time in enumerate(timing_results)]
+        logger.log(data)
+        logger.pprint(data)
+    except Exception as e: # Don't fail the benchmark if there is 1 issue
+        import traceback
+        traceback.print_exc()
+
+    return 
+
+def duckdb_error_test(duckdb_location, filename=':memory:'):
+    result = subprocess.run([duckdb_location, filename, "-c","""SET memory_limit='25MB'; select i, sum(i) from generate_series(0,100000000000) t(i) group by i ;"""],
+                             capture_output=True, text=True, check=True)
+    # result = subprocess.run([duckdb_location, filename, "-c","""blah"""], capture_output=True, text=True, check=True)
+    # print(result)
+    print(result.stdout)
+    # print(result.stderr)
+    # if result.returncode != 0:
+    #     raise Exception(result.stderr)
 
 def run_duckdb_example(duckdb_location, filename=':memory:'):
     result = subprocess.run([duckdb_location, filename, "-c","""SELECT version();"""], capture_output=True, text=True)
@@ -74,7 +94,7 @@ def generate_tpch(duckdb_location, filename=':memory:', scale_factor=0.1):
     result = subprocess.run([duckdb_location, filename, "-c",f"""call dbgen(sf={scale_factor});"""], capture_output=True, text=True)
     # print(result.stdout)
 
-def run_tpch(duckdb_location, filename):
+def run_tpch(duckdb_location, filename, scale_factor):
     tpch_query_count = 23
     # Run all TPC-H queries within the same connection and don't stream the results back over stdout
     tpch_command = '.mode trash ; '
@@ -153,6 +173,10 @@ if __name__ == '__main__':
     for filename in cli_filenames:
         duckdb_timeit(logger, function_name, filename, [f'{filename}.duckdb'], repeat, number)
 
+    function_name = 'duckdb_error_test'
+    for filename in cli_filenames:
+        duckdb_timeit(logger, function_name, filename, [f'{filename}.duckdb'], repeat, number)
+
     # Used to measure the overhead of kicking off a subprocess from Python
     function_name = 'run_subprocess_example'
     # Keeping old format since it doesn't match the function signature of kicking off DuckDB
@@ -165,12 +189,10 @@ if __name__ == '__main__':
             duckdb_timeit(logger, function_name, filename, [f'{filename}.duckdb', scale_factor], repeat, number)
 
             function_name = 'run_tpch'
-            duckdb_timeit(logger, function_name, filename, [f'{filename}.duckdb'], repeat, number)
+            duckdb_timeit(logger, function_name, filename, [f'{filename}.duckdb', scale_factor], repeat, number)
             
     logger.pprint(logger.get_results())
 
-    # TODO: Set up SQLite to save the results (Or just use JSON?)
-    #           Need to pass in a scenario name to each function for logging purposes
     # TODO: Basic plots of the results (from SQLite? More repeatable / analyzable after the fact)
     # TODO: Compare Python and CLI
     # TODO: Compare Wasm and native

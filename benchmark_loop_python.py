@@ -8,6 +8,7 @@
 from datetime import datetime
 import subprocess
 import shutil
+import duckdb
 
 # Versions:
 # 0.2.7 is the first with MacOS ARM
@@ -57,7 +58,7 @@ versions = {
 # Then, point to the right pip3 and install packages
 # Then, point to the right python and run a script with it
 # Then make a loop to do this for multiple
-def create_virtualenv(prefix, duckdb_version):
+def create_virtualenv(prefix, duckdb_version, libraries_list):
     name = prefix + duckdb_version.replace('.','_')
     try:
         shutil.rmtree(name)
@@ -78,8 +79,10 @@ def create_virtualenv(prefix, duckdb_version):
     commands = [
         name+'/bin/pip3',
         'install',
-        'duckdb=='+duckdb_version
+        'duckdb=='+duckdb_version,
+        ' '.join(libraries_list),
     ]
+    print(' '.join(commands))
     result = subprocess.run(commands, capture_output=True, text=True)
     print(result.stdout)
 
@@ -87,10 +90,16 @@ def create_virtualenv(prefix, duckdb_version):
         name+'/bin/python3.9',
         '-c',
         """
+import pandas
 import duckdb
 con = duckdb.connect(':memory:')
 results = con.execute('select version()').fetchall()
 print(results)
+
+my_df = pandas.DataFrame.from_dict({'a': [42]})
+pandas_results = con.execute("select * from my_df").df()
+print(pandas_results)
+
 """
     ]
     result = subprocess.run(commands, capture_output=True, text=True)
@@ -98,6 +107,22 @@ print(results)
     print('result.stderr:\n', result.stderr)
 
 
+# Deduce the correct pandas version
+con = duckdb.connect()
+pandas_versions = con.execute("from 'pandas_versions.csv'").df()
+print(pandas_versions)
+
+i = 0
 for version, details in versions.items():
-    create_virtualenv('./venv_', version)
+    latest_pandas_version = con.execute(f"""
+        from pandas_versions 
+        select 
+            max_by(version,max_upload_time) as max_version
+        where
+            max_upload_time <= '{details['date']}'::datetime
+            and version not ilike '%rc%'
+        """).fetchall()[0][0]
+    print('DuckDB version:',version,'Pandas version:',latest_pandas_version)
+    create_virtualenv('./venv_', version, ['pandas=='+latest_pandas_version])
+
 

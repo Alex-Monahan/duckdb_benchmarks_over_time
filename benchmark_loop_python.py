@@ -10,6 +10,8 @@ import subprocess
 import shutil
 import duckdb
 
+from SQLiteLogger import SQLiteLogger
+
 # Versions:
 # 0.2.7 is the first with MacOS ARM
 # Runs on Python 3.9
@@ -86,21 +88,15 @@ def create_virtualenv(prefix, duckdb_version, libraries_list):
     result = subprocess.run(commands, capture_output=True, text=True)
     print(result.stdout)
 
+def run_python_script(prefix, duckdb_version, script_filename):
+    name = prefix + duckdb_version.replace('.','_')
+    with open(script_filename, 'r') as script_file:
+        python_script = script_file.read()
+
     commands = [
         name+'/bin/python3.9',
         '-c',
-        """
-import pandas
-import duckdb
-con = duckdb.connect(':memory:')
-results = con.execute('select version()').fetchall()
-print(results)
-
-my_df = pandas.DataFrame.from_dict({'a': [42]})
-pandas_results = con.execute("select * from my_df").df()
-print(pandas_results)
-
-"""
+        python_script,
     ]
     result = subprocess.run(commands, capture_output=True, text=True)
     print(result.stdout)
@@ -111,6 +107,8 @@ print(pandas_results)
 con = duckdb.connect()
 pandas_versions = con.execute("from 'pandas_versions.csv'").df()
 print(pandas_versions)
+
+logger = SQLiteLogger('benchmark_log_python.db', delete_file=True)
 
 i = 0
 for version, details in versions.items():
@@ -123,6 +121,14 @@ for version, details in versions.items():
             and version not ilike '%rc%'
         """).fetchall()[0][0]
     print('DuckDB version:',version,'Pandas version:',latest_pandas_version)
-    create_virtualenv('./venv_', version, ['pandas=='+latest_pandas_version])
+    # create_virtualenv('./venv_', version, ['pandas=='+latest_pandas_version])
+    run_python_script('./venv_', version,'./benchmark_script.py')
+    logger.pprint(logger.get_results())
+
+
+    # TODO: Remove. This is for speeding up testing
+    i += 1
+    if i >= 2:
+        break 
 
 

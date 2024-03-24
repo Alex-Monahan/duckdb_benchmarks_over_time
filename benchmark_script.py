@@ -9,14 +9,6 @@ from pathlib import Path
 
 from SQLiteLogger import SQLiteLogger
 
-
-
-# At what level do I want parameters? Do I want to pass them all the way in from the top level script?
-# The advantage there is that I could do something different based on the version. 
-# But I can also look up the version in here.
-
-# Let's start with all the parameters in here.
-
 def delete_database(filename):
     db_filename = filename + '.duckdb'
     try:
@@ -45,10 +37,6 @@ def delete_database(filename):
 
 # This needs to match the filename in the calling loop
 logger = SQLiteLogger('benchmark_log_python.db', delete_file=False)
-
-# Done: use a persistent database
-# Done: Delete that persistent database
-# Done: Set a temp directory
 
 repeat = 2
 versions_without_enums = ['0.2.7', '0.2.8', '0.2.9', '0.3.0', '0.3.1', '0.3.2', '0.3.3', '0.3.4', '0.4.0', '0.5.1']
@@ -129,17 +117,18 @@ for i in range(repeat):
             logger.log([(i,'004 Convert to Enums',json.dumps({'duckdb_version':duckdb_version}),(end_time - start_time))])
 
         # From 33 seconds in 0.2.7 to 1.5 seconds in 0.10!
+        # Using bigint instead of hugeint due to older parquet writer issues 
         group_by_queries = [
-            "CREATE TABLE ans01 AS SELECT id1, sum(v1) AS v1 FROM x GROUP BY id1",
-            "CREATE TABLE ans02 AS SELECT id1, id2, sum(v1) AS v1 FROM x GROUP BY id1, id2",
-            "CREATE TABLE ans03 AS SELECT id3, sum(v1) AS v1, avg(v3) AS v3 FROM x GROUP BY id3",
+            "CREATE TABLE ans01 AS SELECT id1, sum(v1)::bigint AS v1 FROM x GROUP BY id1",
+            "CREATE TABLE ans02 AS SELECT id1, id2, sum(v1)::bigint AS v1 FROM x GROUP BY id1, id2",
+            "CREATE TABLE ans03 AS SELECT id3, sum(v1)::bigint AS v1, avg(v3) AS v3 FROM x GROUP BY id3",
             "CREATE TABLE ans04 AS SELECT id4, avg(v1) AS v1, avg(v2) AS v2, avg(v3) AS v3 FROM x GROUP BY id4",
-            "CREATE TABLE ans05 AS SELECT id6, sum(v1) AS v1, sum(v2) AS v2, sum(v3) AS v3 FROM x GROUP BY id6",
+            "CREATE TABLE ans05 AS SELECT id6, sum(v1)::bigint AS v1, sum(v2)::bigint AS v2, sum(v3)::bigint AS v3 FROM x GROUP BY id6",
             "CREATE TABLE ans06 AS SELECT id4, id5, quantile_cont(v3, 0.5) AS median_v3, stddev(v3) AS sd_v3 FROM x GROUP BY id4, id5",
             "CREATE TABLE ans07 AS SELECT id3, max(v1)-min(v2) AS range_v1_v2 FROM x GROUP BY id3",
             "CREATE TABLE ans08 AS SELECT id6, v3 AS largest2_v3 FROM (SELECT id6, v3, row_number() OVER (PARTITION BY id6 ORDER BY v3 DESC) AS order_v3 FROM x WHERE v3 IS NOT NULL) sub_query WHERE order_v3 <= 2",
             "CREATE TABLE ans09 AS SELECT id2, id4, pow(corr(v1, v2), 2) AS r2 FROM x GROUP BY id2, id4",
-            "CREATE TABLE ans10 AS SELECT id1, id2, id3, id4, id5, id6, sum(v3) AS v3, count(*) AS count FROM x GROUP BY id1, id2, id3, id4, id5, id6",
+            "CREATE TABLE ans10 AS SELECT id1, id2, id3, id4, id5, id6, sum(v3)::bigint AS v3, count(*)::bigint AS count FROM x GROUP BY id1, id2, id3, id4, id5, id6",
             "CHECKPOINT",
         ]
         print('Beginning group by queries', duckdb_version)
@@ -166,7 +155,7 @@ for i in range(repeat):
         end_time = time.perf_counter()
         logger.log([(i,'007.1 Scan and aggregate over Pandas df',json.dumps({'duckdb_version':duckdb_version}),(end_time - start_time))])
 
-        # Write out group by results to parquet (from x seconds to 1.8 seconds in 0.10)
+        # Write out group by results to parquet (from 2.5 seconds to 1.8 seconds in 0.10)
         start_time = time.perf_counter()
         for r in range(1, 11):
             result_table = "ans"+str(r).zfill(2)
@@ -176,7 +165,7 @@ for i in range(repeat):
         end_time = time.perf_counter()
         logger.log([(i,'007.2 Export group by results to Parquet',json.dumps({'duckdb_version':duckdb_version}),(end_time - start_time))])
 
-        # Read from a 10,000,000 row Parquet file (ans10) (from x seconds to 0.2 in 0.10)
+        # Read from a 10,000,000 row Parquet file (ans10) (from 0.11 seconds to 0.014 in 0.10)
         start_time = time.perf_counter()
         parquet_summary = con.execute(f"select sum(v3) as v3 from '{parquet_file}'").fetch_df()
         print(parquet_summary)

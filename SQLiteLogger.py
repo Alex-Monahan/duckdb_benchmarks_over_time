@@ -46,7 +46,8 @@ class SQLiteLogger():
         self.con.commit()
     
     def get_results(self):
-        return self.cur.execute("""select * from results""").fetchall()
+        # return self.cur.execute("""select * from results order by run_id, benchmark, scenario, repeat_id""").fetchall()
+        return self.cur.execute("""select * from results order by benchmark, run_id, scenario, repeat_id""").fetchall()
     
     def pprint(self, results):
         print_string = '[' + '\n'

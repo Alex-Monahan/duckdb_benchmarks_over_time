@@ -52,6 +52,7 @@ versions = {
     '0.9.1': {'date':datetime.strptime('2023-10-11','%Y-%m-%d'),'osx-universal':True},
     '0.9.2': {'date':datetime.strptime('2023-11-14','%Y-%m-%d'),'osx-universal':True},
     '0.10.0': {'date':datetime.strptime('2024-02-13','%Y-%m-%d'),'osx-universal':True},
+    '0.10.1': {'date':datetime.strptime('2024-03-18','%Y-%m-%d'),'osx-universal':True},
 }
 
 # First, install Python 3.9 if it isn't installed already
@@ -111,7 +112,8 @@ print(pandas_versions)
 logger = SQLiteLogger('benchmark_log_python.db', delete_file=True)
 
 i = 0
-for version, details in versions.items():
+for version, details in versions.items().__reversed__():
+# for version, details in versions.items():
     latest_pandas_version = con.execute(f"""
         from pandas_versions 
         select 
@@ -126,9 +128,10 @@ for version, details in versions.items():
     logger.pprint(logger.get_results())
 
 
-    # TODO: Remove. This is for speeding up testing
+    
     i += 1
-    if i >= 2:
+    # TODO: Remove. This is for speeding up testing
+    if i >= 1:
         break 
 
 

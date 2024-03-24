@@ -4,3 +4,4 @@ duckdb_*
 *.pyc
 .DS_Store
 venv_*
+/_data

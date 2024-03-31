@@ -172,6 +172,26 @@ for i in range(repeat):
         end_time = time.perf_counter()
         logger.log([(i,'007.3 Scan and aggregate over Parquet file',json.dumps({'duckdb_version':duckdb_version}),(end_time - start_time))])
 
+
+        # Skip pyarrow tests on version 0.2.7 since numpy wouldn't compile correctly
+        if not duckdb_version == '0.2.7': 
+            # Export group by results to Arrow (from  seconds in 0.2.8 to  seconds in 0.10)
+            # (exporting over 10 million rows)
+            import pyarrow
+            start_time = time.perf_counter()
+            for r in range(1, 11):
+                result_table = "ans"+str(r).zfill(2)
+                arrow_df = con.execute(f"select * from {result_table}").fetch_arrow_table()
+            end_time = time.perf_counter()
+            logger.log([(i,'007.4 Export group by results to Arrow',json.dumps({'duckdb_version':duckdb_version}),(end_time - start_time))])
+
+            # Read from a 10,000,000 row Pandas dataframe (from 0.45 seconds in 0.2.7 to 0.008 seconds in 0.10)
+            start_time = time.perf_counter()
+            arrow_df_summary = con.execute("select sum(v3) as v3 from arrow_df").fetch_arrow_table()
+            print(arrow_df_summary)
+            end_time = time.perf_counter()
+            logger.log([(i,'007.5 Scan and aggregate over Arrow df',json.dumps({'duckdb_version':duckdb_version}),(end_time - start_time))])
+
         # Load data for join queries (10.4 seconds to 3.4 seconds)
         x_csv_file = str(Path(venv_location).parent) + '/_data/J1_1e7_NA_0_0.csv'
         small_csv_file = str(Path(venv_location).parent) + '/_data/J1_1e7_1e1_0_0.csv'
@@ -246,7 +266,7 @@ for i in range(repeat):
         end_time = time.perf_counter()
         logger.log([(i,'010 Join queries',json.dumps({'duckdb_version':duckdb_version}),(end_time - start_time))])
 
-        # Export join results from 47 seconds to 10 seconds
+        # Export join results to Pandas from 47 seconds to 10 seconds
         start_time = time.perf_counter()
         for r in range(1, 6):
             result_table = "ans"+str(r)
@@ -255,17 +275,27 @@ for i in range(repeat):
         end_time = time.perf_counter()
         logger.log([(i,'011 Export join results to Pandas',json.dumps({'duckdb_version':duckdb_version}),(end_time - start_time))])
 
-        
+        # Skip pyarrow tests on version 0.2.7 since numpy wouldn't compile correctly
+        if not duckdb_version == '0.2.7': 
+             # Export join results to Arrow from  seconds to  seconds
+            start_time = time.perf_counter()
+            for r in range(1, 6):
+                result_table = "ans"+str(r)
+                arrow_df = con.execute(f"select * from {result_table}").fetch_arrow_table()
+            end_time = time.perf_counter()
+            logger.log([(i,'012 Export join results to Arrow',json.dumps({'duckdb_version':duckdb_version}),(end_time - start_time))])
 
+        
         
 
     except Exception as err:
+        import traceback
         print("ERROR in duckdb_version",duckdb_version)
         print(err)
+        print(traceback.print_exc())
     finally:
         con.close()
 
-# TODO: Parquet reader
-# TODO: Parquet writer (partitioned y/n?)
-# TODO: S3 Parquet reader / writer? (partitioned y/n?)
 # TODO: Apache Arrow read/write?
+# TODO: S3 Parquet reader / writer? 
+

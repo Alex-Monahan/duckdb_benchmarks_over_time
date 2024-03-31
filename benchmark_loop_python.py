@@ -79,15 +79,25 @@ def create_virtualenv(prefix, duckdb_version, libraries_list):
     print(result.stdout)
     print('Created virtual environment',name)
 
+    with open(f'{name}/bin/requirements.txt', 'w') as f:
+        f.writelines([
+            '\n'.join(libraries_list)+'\n',
+            'duckdb=='+version,
+        ])
+
     commands = [
         name+'/bin/pip3',
-        'install',
-        'duckdb=='+duckdb_version,
-        ' '.join(libraries_list),
+        'install', 
+        '-r',
+        name+'/bin/requirements.txt'
     ]
-    print(' '.join(commands))
+
+    print('|'+' '.join(commands)+'|')
     result = subprocess.run(commands, capture_output=True, text=True)
     print(result.stdout)
+    print('result.stderr:\n', result.stderr)
+
+    print('virtual environment created and libraries added')
 
 def run_python_script(prefix, duckdb_version, script_filename):
     name = prefix + duckdb_version.replace('.','_')
@@ -99,6 +109,7 @@ def run_python_script(prefix, duckdb_version, script_filename):
         '-c',
         python_script,
     ]
+    # print(' '.join(commands))
     result = subprocess.run(commands, capture_output=True, text=True)
     print(result.stdout)
     print('result.stderr:\n', result.stderr)
@@ -108,12 +119,35 @@ def run_python_script(prefix, duckdb_version, script_filename):
 con = duckdb.connect()
 pandas_versions = con.execute("from 'pandas_versions.csv'").df()
 print(pandas_versions)
+pyarrow_versions = con.execute("from 'pyarrow_versions.csv'").df()
+print(pyarrow_versions)
 
 logger = SQLiteLogger('benchmark_log_python.db', delete_file=True)
 
-i = 0
-for version, details in versions.items().__reversed__():
-# for version, details in versions.items():
+
+# SELECT  
+#   name,
+#   version,
+#   max(upload_time) as max_upload_time
+# FROM `bigquery-public-data.pypi.distribution_metadata` 
+# WHERE 
+#   name = 'pyarrow'
+#   and version not like '%.post%'
+# group by
+#   name,
+#   version
+# order by 
+#   max_upload_time desc
+
+# TODO: REMOVE filter down the versions for testing
+create_environments = True # NOTE!!
+run_scripts = True
+# versions_to_test = ['0.2.7', '0.2.8', '0.10.1']
+versions_to_test = ['0.2.8','0.2.9','0.3.0']
+versions = {k: versions.get(k) for k in versions_to_test}
+
+# for version, details in versions.items().__reversed__():
+for version, details in versions.items():
     latest_pandas_version = con.execute(f"""
         from pandas_versions 
         select 
@@ -122,16 +156,29 @@ for version, details in versions.items().__reversed__():
             max_upload_time <= '{details['date']}'::datetime
             and version not ilike '%rc%'
         """).fetchall()[0][0]
-    print('DuckDB version:',version,'Pandas version:',latest_pandas_version)
-    # create_virtualenv('./venv_', version, ['pandas=='+latest_pandas_version])
-    run_python_script('./venv_', version,'./benchmark_script.py')
-    logger.pprint(logger.get_results())
 
-
+    latest_pyarrow_version = con.execute(f"""
+        from pyarrow_versions 
+        select 
+            max_by(version,max_upload_time) as max_version
+        where
+            max_upload_time <= '{details['date']}'::datetime
+        """).fetchall()[0][0]
     
-    i += 1
-    # TODO: Remove. This is for speeding up testing
-    if i >= 1:
-        break 
+    # Pyarrow 5.0.0 is broken, and 6.0.0 fixed the issues
+    if latest_pyarrow_version == '5.0.0':
+        latest_pyarrow_version = '6.0.0'
+    print('DuckDB version:',version,'Pandas version:',latest_pandas_version,'Pyarrow version:',latest_pyarrow_version)
+    # create_virtualenv('./venv_', version, ['pyarrow=='+latest_pyarrow_version])
 
+    if create_environments:
+        if version == '0.2.7':
+            # Then pyarrow installation does not work (numpy failed to compile from source), so skip it
+            create_virtualenv('./venv_', version, ['pandas=='+latest_pandas_version])
+        else:
+            create_virtualenv('./venv_', version, ['pandas=='+latest_pandas_version, 'pyarrow=='+latest_pyarrow_version])
+    
+    if run_scripts:
+        run_python_script('./venv_', version,'./benchmark_script.py')
+        logger.pprint(logger.get_results())
 

@@ -140,14 +140,14 @@ logger = SQLiteLogger('benchmark_log_python.db', delete_file=True)
 #   max_upload_time desc
 
 # TODO: REMOVE filter down the versions for testing
-create_environments = True # NOTE!!
+create_environments = False
 run_scripts = True
-# versions_to_test = ['0.2.7', '0.2.8', '0.10.1']
-versions_to_test = ['0.2.8','0.2.9','0.3.0']
+versions_to_test = ['0.2.7', '0.2.8', '0.10.1']
+# versions_to_test = ['0.2.8','0.2.9','0.3.0']
 versions = {k: versions.get(k) for k in versions_to_test}
-
-# for version, details in versions.items().__reversed__():
-for version, details in versions.items():
+    
+for version, details in versions.items().__reversed__():
+# for version, details in versions.items():
     latest_pandas_version = con.execute(f"""
         from pandas_versions 
         select 
@@ -165,14 +165,14 @@ for version, details in versions.items():
             max_upload_time <= '{details['date']}'::datetime
         """).fetchall()[0][0]
     
-    # Pyarrow 5.0.0 is broken, and 6.0.0 fixed the issues
-    if latest_pyarrow_version == '5.0.0':
-        latest_pyarrow_version = '6.0.0'
-    print('DuckDB version:',version,'Pandas version:',latest_pandas_version,'Pyarrow version:',latest_pyarrow_version)
+    # # Pyarrow 5.0.0 is broken, and 4.0.1 does not compile numpy
+    # if latest_pyarrow_version == '5.0.0':
+    #     latest_pyarrow_version = '4.0.1'
+    # print('DuckDB version:',version,'Pandas version:',latest_pandas_version,'Pyarrow version:',latest_pyarrow_version)
     # create_virtualenv('./venv_', version, ['pyarrow=='+latest_pyarrow_version])
 
     if create_environments:
-        if version == '0.2.7':
+        if version in ['0.2.7','0.2.8','0.2.9','0.3.0']:
             # Then pyarrow installation does not work (numpy failed to compile from source), so skip it
             create_virtualenv('./venv_', version, ['pandas=='+latest_pandas_version])
         else:

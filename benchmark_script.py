@@ -38,8 +38,9 @@ def delete_database(filename):
 # This needs to match the filename in the calling loop
 logger = SQLiteLogger('benchmark_log_python.db', delete_file=False)
 
-repeat = 2
+repeat = 1
 versions_without_enums = ['0.2.7', '0.2.8', '0.2.9', '0.3.0', '0.3.1', '0.3.2', '0.3.3', '0.3.4', '0.4.0', '0.5.1']
+versions_without_pyarrow = ['0.2.7', '0.2.8', '0.2.9', '0.3.0']
 
 for i in range(repeat):
     try:
@@ -173,8 +174,8 @@ for i in range(repeat):
         logger.log([(i,'007.3 Scan and aggregate over Parquet file',json.dumps({'duckdb_version':duckdb_version}),(end_time - start_time))])
 
 
-        # Skip pyarrow tests on version 0.2.7 since numpy wouldn't compile correctly
-        if not duckdb_version == '0.2.7': 
+        # Skip pyarrow tests on version 0.2.7-0.3.0 since numpy wouldn't compile correctly
+        if not duckdb_version in versions_without_pyarrow: 
             # Export group by results to Arrow (from  seconds in 0.2.8 to  seconds in 0.10)
             # (exporting over 10 million rows)
             import pyarrow
@@ -275,8 +276,8 @@ for i in range(repeat):
         end_time = time.perf_counter()
         logger.log([(i,'011 Export join results to Pandas',json.dumps({'duckdb_version':duckdb_version}),(end_time - start_time))])
 
-        # Skip pyarrow tests on version 0.2.7 since numpy wouldn't compile correctly
-        if not duckdb_version == '0.2.7': 
+        # Skip pyarrow tests on version 0.2.7-0.3.0 since numpy wouldn't compile correctly
+        if not duckdb_version in versions_without_pyarrow: 
              # Export join results to Arrow from  seconds to  seconds
             start_time = time.perf_counter()
             for r in range(1, 6):

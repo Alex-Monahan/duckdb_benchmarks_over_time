@@ -6,6 +6,7 @@
 # Example Pandas dataframe (H2O.ai?)
 
 from datetime import datetime
+import time
 import subprocess
 import shutil
 import duckdb
@@ -142,7 +143,8 @@ logger = SQLiteLogger('benchmark_log_python.db', delete_file=True)
 # TODO: REMOVE filter down the versions for testing
 create_environments = False
 run_scripts = True
-versions_to_test = ['0.2.7', '0.2.8', '0.10.1']
+# versions_to_test = ['0.2.7', '0.2.8', '0.10.1']
+versions_to_test = ['0.10.1']
 # versions_to_test = ['0.2.8','0.2.9','0.3.0']
 versions = {k: versions.get(k) for k in versions_to_test}
     
@@ -179,6 +181,10 @@ for version, details in versions.items().__reversed__():
             create_virtualenv('./venv_', version, ['pandas=='+latest_pandas_version, 'pyarrow=='+latest_pyarrow_version])
     
     if run_scripts:
+        start_time = time.perf_counter()
         run_python_script('./venv_', version,'./benchmark_script.py')
         logger.pprint(logger.get_results())
+        end_time = time.perf_counter()
+        print(f'Running script for version {version} took {round(end_time-start_time,1)} seconds')
+
 

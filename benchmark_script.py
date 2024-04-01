@@ -28,12 +28,26 @@ def delete_database(filename):
     except OSError:
         pass
 
-# Logger schema for reference
-# run_id int, -- Auto-generated when logger is instantiated
-# repeat_id int,
-# benchmark varchar,
-# scenario json,
-# time float 
+def time_and_log(f, *args, **kwargs):
+    """Psuedo decorator for timing and logging.
+    r, b, s, and l are special kwargs for logging purposes.
+    Called like: time_and_log(sleepy,0.3,time_to_sleep_kw=0.5, r=1, b='007.4 Export group by results to Arrow', s=json.dumps({'duckdb_version':duckdb_version}), l=logger)"""
+    # Logger schema for reference
+    # run_id int, -- Auto-generated when logger is instantiated
+    # repeat_id int,
+    # benchmark varchar,
+    # scenario json,
+    # time float 
+    def wrapped_func(*args, **kwargs):
+        start_time = time.perf_counter()
+        # Exclude repeat_id, benchmark, scenario
+        trimmed_kwargs = {k:kwargs.get(k) for k in kwargs if k not in ['r', 'b', 's', 'l'] }
+        result = f(*args, **trimmed_kwargs)
+        end_time = time.perf_counter()
+        kwargs.get('l').log([(kwargs.get('r'),kwargs.get('b'),kwargs.get('s'),(end_time - start_time))])
+        return result
+    return wrapped_func(*args, **kwargs)
+
 
 # This needs to match the filename in the calling loop
 logger = SQLiteLogger('benchmark_log_python.db', delete_file=False)
@@ -42,19 +56,21 @@ repeat = 1
 versions_without_enums = ['0.2.7', '0.2.8', '0.2.9', '0.3.0', '0.3.1', '0.3.2', '0.3.3', '0.3.4', '0.4.0', '0.5.1']
 versions_without_pyarrow = ['0.2.7', '0.2.8', '0.2.9', '0.3.0']
 
+def pandas_test(con):
+    return con.execute("select * from my_df").df()
+
+
 for i in range(repeat):
     try:
         print(sys.executable)
         venv_location = str(Path(sys.executable).parent.parent)
         print(venv_location)
         
-        start_time = time.perf_counter()
         con = duckdb.connect(':memory:')
-        end_time = time.perf_counter()
         duckdb_version = con.execute('select version()').fetchall()[0][0]
         print(duckdb_version)
+        scenario = json.dumps({'duckdb_version':duckdb_version})
         con.close()
-        logger.log([(i,'001 Connect in memory',json.dumps({'duckdb_version':duckdb_version}),(end_time - start_time))])
 
         db_filepath = venv_location+'/'+duckdb_version.replace('.','_')
         delete_database(db_filepath)
@@ -72,12 +88,7 @@ for i in range(repeat):
         print(con.execute(f"pragma temp_directory='{temp_dir}'").fetchall())
         my_df = pd.DataFrame.from_dict({'a': [42]})
 
-        start_time = time.perf_counter()
-        pandas_results = con.execute("select * from my_df").df()
-        print(pandas_results)
-        end_time = time.perf_counter()
-        logger.log([(i,'002 Query pandas',json.dumps({'duckdb_version':duckdb_version}),(end_time - start_time))])
-
+        time_and_log(pandas_test, con, r=i, b='002 Query pandas',s=scenario, l=logger)
 
         # Create the table from the csv file
             

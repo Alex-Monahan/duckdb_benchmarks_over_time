@@ -140,7 +140,7 @@ logger = SQLiteLogger('benchmark_log_python.db', delete_file=True)
 # order by 
 #   max_upload_time desc
 
-# TODO: REMOVE filter down the versions for testing
+# TODO: REMOVE. Filter down the versions for testing
 create_environments = False
 run_scripts = True
 # versions_to_test = ['0.2.7', '0.2.8', '0.10.1']

@@ -99,7 +99,8 @@ def convert_to_enums_group_by(con, duckdb_version, versions_without_enums):
         "DROP TYPE IF EXISTS id2ENUM",
         "CREATE TYPE id1ENUM AS ENUM (SELECT id1 FROM y)",
         "CREATE TYPE id2ENUM AS ENUM (SELECT id2 FROM y)",
-        "CREATE OR REPLACE TABLE x(id1 id1ENUM, id2 id2ENUM, id3 VARCHAR, id4 INT, id5 INT, id6 INT, v1 INT, v2 INT, v3 FLOAT)",
+        "DROP TABLE IF EXISTS x",
+        "CREATE TABLE x(id1 id1ENUM, id2 id2ENUM, id3 VARCHAR, id4 INT, id5 INT, id6 INT, v1 INT, v2 INT, v3 FLOAT)",
         "INSERT INTO x (SELECT * FROM y)",
         "DROP TABLE IF EXISTS y",
         "CHECKPOINT",
@@ -113,16 +114,26 @@ def group_by_queries(con):
     # From 33 seconds in 0.2.7 to 1.5 seconds in 0.10!
     # Using bigint instead of hugeint due to older parquet writer issues 
     group_by_queries = [
-        "CREATE OR REPLACE TABLE ans01 AS SELECT id1, sum(v1)::bigint AS v1 FROM x GROUP BY id1",
-        "CREATE OR REPLACE TABLE ans02 AS SELECT id1, id2, sum(v1)::bigint AS v1 FROM x GROUP BY id1, id2",
-        "CREATE OR REPLACE TABLE ans03 AS SELECT id3, sum(v1)::bigint AS v1, avg(v3) AS v3 FROM x GROUP BY id3",
-        "CREATE OR REPLACE TABLE ans04 AS SELECT id4, avg(v1) AS v1, avg(v2) AS v2, avg(v3) AS v3 FROM x GROUP BY id4",
-        "CREATE OR REPLACE TABLE ans05 AS SELECT id6, sum(v1)::bigint AS v1, sum(v2)::bigint AS v2, sum(v3)::bigint AS v3 FROM x GROUP BY id6",
-        "CREATE OR REPLACE TABLE ans06 AS SELECT id4, id5, quantile_cont(v3, 0.5) AS median_v3, stddev(v3) AS sd_v3 FROM x GROUP BY id4, id5",
-        "CREATE OR REPLACE TABLE ans07 AS SELECT id3, max(v1)-min(v2) AS range_v1_v2 FROM x GROUP BY id3",
-        "CREATE OR REPLACE TABLE ans08 AS SELECT id6, v3 AS largest2_v3 FROM (SELECT id6, v3, row_number() OVER (PARTITION BY id6 ORDER BY v3 DESC) AS order_v3 FROM x WHERE v3 IS NOT NULL) sub_query WHERE order_v3 <= 2",
-        "CREATE OR REPLACE TABLE ans09 AS SELECT id2, id4, pow(corr(v1, v2), 2) AS r2 FROM x GROUP BY id2, id4",
-        "CREATE OR REPLACE TABLE ans10 AS SELECT id1, id2, id3, id4, id5, id6, sum(v3)::bigint AS v3, count(*)::bigint AS count FROM x GROUP BY id1, id2, id3, id4, id5, id6",
+        "DROP TABLE IF EXISTS ans01",
+        "DROP TABLE IF EXISTS ans02",
+        "DROP TABLE IF EXISTS ans03",
+        "DROP TABLE IF EXISTS ans04",
+        "DROP TABLE IF EXISTS ans05",
+        "DROP TABLE IF EXISTS ans06",
+        "DROP TABLE IF EXISTS ans07",
+        "DROP TABLE IF EXISTS ans08",
+        "DROP TABLE IF EXISTS ans09",
+        "DROP TABLE IF EXISTS ans10",
+        "CREATE TABLE ans01 AS SELECT id1, sum(v1)::bigint AS v1 FROM x GROUP BY id1",
+        "CREATE TABLE ans02 AS SELECT id1, id2, sum(v1)::bigint AS v1 FROM x GROUP BY id1, id2",
+        "CREATE TABLE ans03 AS SELECT id3, sum(v1)::bigint AS v1, avg(v3) AS v3 FROM x GROUP BY id3",
+        "CREATE TABLE ans04 AS SELECT id4, avg(v1) AS v1, avg(v2) AS v2, avg(v3) AS v3 FROM x GROUP BY id4",
+        "CREATE TABLE ans05 AS SELECT id6, sum(v1)::bigint AS v1, sum(v2)::bigint AS v2, sum(v3)::bigint AS v3 FROM x GROUP BY id6",
+        "CREATE TABLE ans06 AS SELECT id4, id5, quantile_cont(v3, 0.5) AS median_v3, stddev(v3) AS sd_v3 FROM x GROUP BY id4, id5",
+        "CREATE TABLE ans07 AS SELECT id3, max(v1)-min(v2) AS range_v1_v2 FROM x GROUP BY id3",
+        "CREATE TABLE ans08 AS SELECT id6, v3 AS largest2_v3 FROM (SELECT id6, v3, row_number() OVER (PARTITION BY id6 ORDER BY v3 DESC) AS order_v3 FROM x WHERE v3 IS NOT NULL) sub_query WHERE order_v3 <= 2",
+        "CREATE TABLE ans09 AS SELECT id2, id4, pow(corr(v1, v2), 2) AS r2 FROM x GROUP BY id2, id4",
+        "CREATE TABLE ans10 AS SELECT id1, id2, id3, id4, id5, id6, sum(v3)::bigint AS v3, count(*)::bigint AS count FROM x GROUP BY id1, id2, id3, id4, id5, id6",
         "CHECKPOINT",
     ]
     print('Beginning group by queries')
@@ -175,10 +186,14 @@ def ingest_join_csvs(con, x_csv, small_csv, medium_csv, big_csv, duckdb_version,
     if duckdb_version in versions_without_enums:
         table_suffix = ''
     create_table_queries_joins = [
-        f"CREATE OR REPLACE TABLE x{table_suffix} AS SELECT * FROM read_csv_auto('{x_csv}')",
-        f"CREATE OR REPLACE TABLE small{table_suffix} AS SELECT * FROM read_csv_auto('{small_csv}')",
-        f"CREATE OR REPLACE TABLE medium{table_suffix} AS SELECT * FROM read_csv_auto('{medium_csv}')",
-        f"CREATE OR REPLACE TABLE big{table_suffix} AS SELECT * FROM read_csv_auto('{big_csv}')",
+        f"DROP TABLE IF EXISTS x{table_suffix}",
+        f"DROP TABLE IF EXISTS small{table_suffix}",
+        f"DROP TABLE IF EXISTS medium{table_suffix}",
+        f"DROP TABLE IF EXISTS big{table_suffix}",
+        f"CREATE TABLE x{table_suffix} AS SELECT * FROM read_csv_auto('{x_csv}')",
+        f"CREATE TABLE small{table_suffix} AS SELECT * FROM read_csv_auto('{small_csv}')",
+        f"CREATE TABLE medium{table_suffix} AS SELECT * FROM read_csv_auto('{medium_csv}')",
+        f"CREATE TABLE big{table_suffix} AS SELECT * FROM read_csv_auto('{big_csv}')",
         "CHECKPOINT"
     ]
 
@@ -195,13 +210,16 @@ def convert_to_enums_joins(con):
         f"CREATE TYPE id4ENUM AS ENUM ({id4_enum_statement})",
         f"CREATE TYPE id5ENUM AS ENUM ({id5_enum_statement})",
 
-        "CREATE OR REPLACE TABLE small(id1 INT64, id4 id4ENUM, v2 DOUBLE)",
+        "DROP TABLE IF EXISTS small",
+        "CREATE TABLE small(id1 INT64, id4 id4ENUM, v2 DOUBLE)",
         "INSERT INTO small (SELECT * from small_csv)",
 
-        "CREATE OR REPLACE TABLE medium(id1 INT64, id2 INT64, id4 id4ENUM, id5 id5ENUM, v2 DOUBLE)",
+        "DROP TABLE IF EXISTS medium",
+        "CREATE TABLE medium(id1 INT64, id2 INT64, id4 id4ENUM, id5 id5ENUM, v2 DOUBLE)",
         "INSERT INTO medium (SELECT * FROM medium_csv)",
 
-        "CREATE OR REPLACE TABLE big(id1 INT64, id2 INT64, id3 INT64, id4 id4ENUM, id5 id5ENUM, id6 VARCHAR, v2 DOUBLE)",
+        "DROP TABLE IF EXISTS big",
+        "CREATE TABLE big(id1 INT64, id2 INT64, id3 INT64, id4 id4ENUM, id5 id5ENUM, id6 VARCHAR, v2 DOUBLE)",
         "INSERT INTO big (Select * from big_csv)",
 
         "DROP TABLE IF EXISTS x",
@@ -221,11 +239,16 @@ def convert_to_enums_joins(con):
 def join_queries(con):
     # Join queries from 28.5 seconds to 4.1 seconds
     join_queries = [
-        "CREATE OR REPLACE TABLE ans1 AS SELECT x.*, small.id4 AS small_id4, v2 FROM x JOIN small USING (id1)",
-        "CREATE OR REPLACE TABLE ans2 AS SELECT x.*, medium.id1 AS medium_id1, medium.id4 AS medium_id4, medium.id5 AS medium_id5, v2 FROM x JOIN medium USING (id2)",
-        "CREATE OR REPLACE TABLE ans3 AS SELECT x.*, medium.id1 AS medium_id1, medium.id4 AS medium_id4, medium.id5 AS medium_id5, v2 FROM x LEFT JOIN medium USING (id2)",
-        "CREATE OR REPLACE TABLE ans4 AS SELECT x.*, medium.id1 AS medium_id1, medium.id2 AS medium_id2, medium.id4 AS medium_id4, v2 FROM x JOIN medium USING (id5)",
-        "CREATE OR REPLACE TABLE ans5 AS SELECT x.*, big.id1 AS big_id1, big.id2 AS big_id2, big.id4 AS big_id4, big.id5 AS big_id5, big.id6 AS big_id6, v2 FROM x JOIN big USING (id3)",
+        "DROP TABLE IF EXISTS ans1",
+        "DROP TABLE IF EXISTS ans2",
+        "DROP TABLE IF EXISTS ans3",
+        "DROP TABLE IF EXISTS ans4",
+        "DROP TABLE IF EXISTS ans5",
+        "CREATE TABLE ans1 AS SELECT x.*, small.id4 AS small_id4, v2 FROM x JOIN small USING (id1)",
+        "CREATE TABLE ans2 AS SELECT x.*, medium.id1 AS medium_id1, medium.id4 AS medium_id4, medium.id5 AS medium_id5, v2 FROM x JOIN medium USING (id2)",
+        "CREATE TABLE ans3 AS SELECT x.*, medium.id1 AS medium_id1, medium.id4 AS medium_id4, medium.id5 AS medium_id5, v2 FROM x LEFT JOIN medium USING (id2)",
+        "CREATE TABLE ans4 AS SELECT x.*, medium.id1 AS medium_id1, medium.id2 AS medium_id2, medium.id4 AS medium_id4, v2 FROM x JOIN medium USING (id5)",
+        "CREATE TABLE ans5 AS SELECT x.*, big.id1 AS big_id1, big.id2 AS big_id2, big.id4 AS big_id4, big.id5 AS big_id5, big.id6 AS big_id6, v2 FROM x JOIN big USING (id3)",
         "CHECKPOINT",
     ]
     
@@ -247,7 +270,7 @@ def export_join_to_arrow(con):
 # This needs to match the filename in the calling loop
 logger = SQLiteLogger('benchmark_log_python.db', delete_file=False)
 
-repeat = 1
+repeat = 3
 versions_without_enums = ['0.2.7', '0.2.8', '0.2.9', '0.3.0', '0.3.1', '0.3.2', '0.3.3', '0.3.4', '0.4.0', '0.5.1']
 versions_without_pyarrow = ['0.2.7', '0.2.8', '0.2.9', '0.3.0']
 

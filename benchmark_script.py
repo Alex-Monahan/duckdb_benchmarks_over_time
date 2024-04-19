@@ -92,7 +92,7 @@ def ingest_group_by_csv(con, csv_file, duckdb_version, versions_without_enums):
     for query in create_table_queries:
         con.execute(query).fetchall()
 
-def convert_to_enums_group_by(con, duckdb_version, versions_without_enums):
+def convert_to_enums_group_by(con, duckdb_version):
     convert_to_enum_queries = [
         # if there are no nulls (which duckdb enums can't handle, make enums)
         "DROP TYPE IF EXISTS id1ENUM",
@@ -105,10 +105,8 @@ def convert_to_enums_group_by(con, duckdb_version, versions_without_enums):
         "DROP TABLE IF EXISTS y",
         "CHECKPOINT",
     ]
-    # If Enum from query support is not present, do not try to create any enums
-    if duckdb_version not in versions_without_enums:
-        for query in convert_to_enum_queries:
-            con.execute(query).fetchall()
+    for query in convert_to_enum_queries:
+        con.execute(query).fetchall()
 
 def group_by_queries(con):
     # From 33 seconds in 0.2.7 to 1.5 seconds in 0.10!
@@ -289,8 +287,9 @@ for i in range(repeat):
         time_and_log(ingest_group_by_csv, con, csv_file, duckdb_version, versions_without_enums,
                      r=i, b='002 Create table from csv', s=scenario, l=logger)
         
-        time_and_log(convert_to_enums_group_by, con, duckdb_version, versions_without_enums,
-                     r=i, b='003 Convert to Enums', s=scenario, l=logger)
+        if duckdb_version not in versions_without_enums:
+            time_and_log(convert_to_enums_group_by, con, duckdb_version,
+                        r=i, b='003 Convert to Enums', s=scenario, l=logger)
 
         time_and_log(group_by_queries, con,
                      r=i, b='004 Group by queries', s=scenario, l=logger)

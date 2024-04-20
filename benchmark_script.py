@@ -345,6 +345,81 @@ for i in range(repeat):
     finally:
         con.close()
 
-# TODO: Apache Arrow read/write?
+# Group by - see if we OOM!
+csv_files = [
+    str(Path(venv_location).parent) + '/_data/G1_1e8_1e2_0_0.csv',
+    str(Path(venv_location).parent) + '/_data/G1_1e9_1e2_0_0.csv'
+]
+for csv_file in csv_files:
+    try:
+        con = connect_to_duckdb(venv_location, duckdb_version)
+        row_count = csv_file.split('/')[-1].split('_')[1]
+        scenario = json.dumps({'duckdb_version':duckdb_version, "row_count":row_count})
+        time_and_log(ingest_group_by_csv, con, csv_file, duckdb_version, versions_without_enums,
+                    r=i, b='101 Group By Scale test: Create table from csv', s=scenario, l=logger)
+        
+        if duckdb_version not in versions_without_enums:
+            time_and_log(convert_to_enums_group_by, con, duckdb_version,
+                        r=i, b='102 Group By Scale test: Convert to Enums', s=scenario, l=logger)
+
+        time_and_log(group_by_queries, con,
+                    r=i, b='103 Group By Scale test: Group by queries', s=scenario, l=logger)
+    
+    except Exception as err:
+        import traceback
+        print("ERROR in duckdb_version", duckdb_version, 'row_count', row_count)
+        print(err)
+        print(traceback.print_exc())
+        # No need to try a larger file if the other failed already
+        break
+    finally:
+        con.close()
+
+# Join - see if we OOM!
+join_csv_files = [
+    {
+        'x_csv' :str(Path(venv_location).parent) + '/_data/J1_1e8_NA_0_0.csv',
+        'small_csv': str(Path(venv_location).parent) + '/_data/J1_1e8_1e2_0_0.csv',
+        'medium_csv': str(Path(venv_location).parent) + '/_data/J1_1e8_1e5_0_0.csv',
+        'big_csv': str(Path(venv_location).parent) + '/_data/J1_1e8_1e8_0_0.csv',
+    },
+    {
+        'x_csv' :str(Path(venv_location).parent) + '/_data/J1_1e9_NA_0_0.csv',
+        'small_csv': str(Path(venv_location).parent) + '/_data/J1_1e9_1e3_0_0.csv',
+        'medium_csv': str(Path(venv_location).parent) + '/_data/J1_1e9_1e6_0_0.csv',
+        'big_csv': str(Path(venv_location).parent) + '/_data/J1_1e9_1e9_0_0.csv',
+    },
+]
+for csv_file_dict in join_csv_files:
+    try:
+        con = connect_to_duckdb(venv_location, duckdb_version)
+        x_csv = csv_file_dict['x_csv']
+        small_csv = csv_file_dict['small_csv']
+        medium_csv = csv_file_dict['medium_csv']
+        big_csv = csv_file_dict['big_csv']
+
+        row_count = x_csv.split('/')[-1].split('_')[1]
+        scenario = json.dumps({'duckdb_version':duckdb_version, "row_count":row_count})
+
+        time_and_log(ingest_join_csvs, con, x_csv, small_csv, medium_csv, big_csv, duckdb_version, versions_without_enums,
+                     r=i, b='201 Join Scale test: Create tables from csvs joins', s=scenario, l=logger)
+
+        if duckdb_version not in versions_without_enums:
+            time_and_log(convert_to_enums_joins, con,
+                     r=i, b='202 Join Scale test: Convert to Enums for joins', s=scenario, l=logger)
+
+        time_and_log(join_queries, con,
+                     r=i, b='203 Join Scale test: Join queries', s=scenario, l=logger)
+    
+    except Exception as err:
+        import traceback
+        print("ERROR in duckdb_version", duckdb_version, 'row_count', row_count)
+        print(err)
+        print(traceback.print_exc())
+        # No need to try a larger file if the other failed already
+        break
+    finally:
+        con.close()
+
 # TODO: S3 Parquet reader / writer? 
 

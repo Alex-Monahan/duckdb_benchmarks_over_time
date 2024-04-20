@@ -5,11 +5,12 @@
 # Install the right version of Pandas for each DuckDB version
 # Example Pandas dataframe (H2O.ai?)
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 import subprocess
 import shutil
 import duckdb
+from threading import Thread
 
 from SQLiteLogger import SQLiteLogger
 
@@ -54,6 +55,7 @@ versions = {
     '0.9.2': {'date':datetime.strptime('2023-11-14','%Y-%m-%d'),'osx-universal':True},
     '0.10.0': {'date':datetime.strptime('2024-02-13','%Y-%m-%d'),'osx-universal':True},
     '0.10.1': {'date':datetime.strptime('2024-03-18','%Y-%m-%d'),'osx-universal':True},
+    '0.10.2': {'date':datetime.strptime('2024-04-17','%Y-%m-%d'),'osx-universal':True},
 }
 
 # First, install Python 3.9 if it isn't installed already
@@ -116,6 +118,23 @@ def run_python_script(prefix, duckdb_version, script_filename):
     print('result.stderr:\n', result.stderr)
 
 
+def log_on_regular_cadence(total_time, interval):
+    logger = SQLiteLogger('benchmark_log_python.db', delete_file=False)
+    global stop_logging
+    stop_logging = False
+    start_time_counter = time.perf_counter()
+    end_time = time.time() + total_time
+    while time.time() < end_time:
+        logger.pprint(logger.get_results())
+        print(datetime.now().isoformat(sep=' '))
+        print('Elapsed time:',timedelta(seconds=time.perf_counter() - start_time_counter))
+        if stop_logging:
+            break
+        time.sleep(interval)
+
+
+
+
 # Deduce the correct pandas version
 con = duckdb.connect()
 pandas_versions = con.execute("from 'pandas_versions.csv'").df()
@@ -143,13 +162,13 @@ logger = SQLiteLogger('benchmark_log_python.db', delete_file=True)
 # TODO: REMOVE. Filter down the versions for testing
 create_environments = False
 run_scripts = True
-# versions_to_test = ['0.2.7', '0.2.8', '0.10.1']
-versions_to_test = ['0.10.1']
+# versions_to_test = ['0.2.7']
+# versions_to_test = ['0.10.2']
 # versions_to_test = ['0.2.8','0.2.9','0.3.0']
-versions = {k: versions.get(k) for k in versions_to_test}
+# versions = {k: versions.get(k) for k in versions_to_test}
     
-for version, details in versions.items().__reversed__():
-# for version, details in versions.items():
+# for version, details in versions.items().__reversed__():
+for version, details in versions.items():
     latest_pandas_version = con.execute(f"""
         from pandas_versions 
         select 
@@ -181,10 +200,18 @@ for version, details in versions.items().__reversed__():
             create_virtualenv('./venv_', version, ['pandas=='+latest_pandas_version, 'pyarrow=='+latest_pyarrow_version])
     
     if run_scripts:
+        t = Thread(target=log_on_regular_cadence,args=(1000000,120,))
+        t.start()
+        print('Background logging thread started')
+
         start_time = time.perf_counter()
         run_python_script('./venv_', version,'./benchmark_script.py')
+        stop_logging=True
+        t.join()
+
         logger.pprint(logger.get_results())
         end_time = time.perf_counter()
         print(f'Running script for version {version} took {round(end_time-start_time,1)} seconds')
+
 
 

@@ -166,9 +166,13 @@ run_scripts = True
 # versions_to_test = ['0.10.2']
 # versions_to_test = ['0.2.8','0.2.9','0.3.0']
 # versions = {k: versions.get(k) for k in versions_to_test}
-    
-# for version, details in versions.items().__reversed__():
-for version, details in versions.items():
+
+t = Thread(target=log_on_regular_cadence,args=(1000000,300,))
+t.start()
+print('Background logging thread started')
+
+for version, details in versions.items().__reversed__():
+# for version, details in versions.items():
     latest_pandas_version = con.execute(f"""
         from pandas_versions 
         select 
@@ -200,18 +204,13 @@ for version, details in versions.items():
             create_virtualenv('./venv_', version, ['pandas=='+latest_pandas_version, 'pyarrow=='+latest_pyarrow_version])
     
     if run_scripts:
-        t = Thread(target=log_on_regular_cadence,args=(1000000,120,))
-        t.start()
-        print('Background logging thread started')
-
         start_time = time.perf_counter()
         run_python_script('./venv_', version,'./benchmark_script.py')
-        stop_logging=True
-        t.join()
 
         logger.pprint(logger.get_results())
         end_time = time.perf_counter()
         print(f'Running script for version {version} took {round(end_time-start_time,1)} seconds')
 
-
+stop_logging=True
+t.join()
 

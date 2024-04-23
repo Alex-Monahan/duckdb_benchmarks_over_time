@@ -273,6 +273,216 @@ def export_join_to_arrow(con):
         result_table = "ans"+str(r)
         arrow_df = con.execute(f"select * from {result_table}").fetch_arrow_table()
 
+def ingest_windowing_csv(con, big_csv):
+    # Load data for windowing queries
+    create_table_queries_windowing = [
+        f"DROP TABLE IF EXISTS windowing",
+        f"CREATE TABLE windowing AS SELECT id1, id2, id3, v2 FROM read_csv_auto('{big_csv}')",
+        "CHECKPOINT"
+    ]
+
+    print('Beginning create_table_queries_windowing', duckdb_version)
+    for query in create_table_queries_windowing:
+        con.execute(query).fetchall()
+
+def window_basic(con):
+    windowing_queries = [
+        "DROP TABLE IF EXISTS windowing_results",
+        f"""
+        CREATE TABLE windowing_results AS
+        SELECT 
+            id1,
+            id2,
+            id3,
+            v2,
+            sum(v2) over ()
+        FROM windowing
+        """,
+        # "SELECT * FROM windowing limit 2",
+    ]
+    for query in windowing_queries:
+        print(con.execute(query).fetchall())
+
+def window_order_by(con):
+    windowing_queries = [
+        "DROP TABLE IF EXISTS windowing_results",
+        f"""
+        CREATE TABLE windowing_results AS
+        SELECT 
+            id1,
+            id2,
+            id3,
+            v2,
+            -- Benchmark the sorting alone
+            first(v2) over (order by id3),
+            -- Typical row_number
+            row_number() over (order by id3)
+        FROM windowing
+        """,
+        # "SELECT * FROM windowing limit 2",
+    ]
+    for query in windowing_queries:
+        print(con.execute(query).fetchall())
+
+def window_quantiles(con):
+    windowing_queries = [
+        "DROP TABLE IF EXISTS windowing_results",
+        f"""
+        CREATE TABLE windowing_results AS
+        SELECT 
+            id1,
+            id2,
+            id3,
+            v2,
+            quantile_cont(v2, [0, 0.25, 0.50, 0.75, 1]) over ()
+        FROM windowing
+        """,
+        # "SELECT * FROM windowing limit 2",
+    ]
+    for query in windowing_queries:
+        print(con.execute(query).fetchall())
+
+def window_partition_by(con):
+    windowing_queries = [
+        "DROP TABLE IF EXISTS windowing_results",
+        f"""
+        CREATE TABLE windowing_results AS
+        SELECT 
+            id1,
+            id2,
+            id3,
+            v2,
+            -- Sum over partition by
+            sum(v2) over (partition by id1),
+            sum(v2) over (partition by id2),
+            sum(v2) over (partition by id3)
+        FROM windowing
+        """,
+        # "SELECT * FROM windowing limit 2",
+    ]
+    for query in windowing_queries:
+        print(con.execute(query).fetchall())
+
+def window_order_by_partition_by(con):
+    windowing_queries = [
+        "DROP TABLE IF EXISTS windowing_results",
+        f"""
+        CREATE TABLE windowing_results AS
+        SELECT 
+            id1,
+            id2,
+            id3,
+            v2,
+            -- Benchmark sorting within partitions
+            first(v2) over (partition by id2 order by id3)
+        FROM windowing
+        """,
+        # "SELECT * FROM windowing limit 2",
+    ]
+    for query in windowing_queries:
+        print(con.execute(query).fetchall())
+
+def window_lead_lag(con):
+    windowing_queries = [
+        "DROP TABLE IF EXISTS windowing_results",
+        f"""
+        CREATE TABLE windowing_results AS
+        SELECT 
+            id1,
+            id2,
+            id3,
+            v2,
+            -- Lag
+            first(v2) over (order by id3 rows between 1 preceding and 1 preceding),
+            -- Lead
+            first(v2) over (order by id3 rows between 1 following and 1 following)
+        FROM windowing
+        """,
+        # "SELECT * FROM windowing limit 2",
+    ]
+    for query in windowing_queries:
+        print(con.execute(query).fetchall())
+
+def window_moving_averages(con):
+    windowing_queries = [
+        "DROP TABLE IF EXISTS windowing_results",
+        f"""
+        CREATE TABLE windowing_results AS
+        SELECT 
+            id1,
+            id2,
+            id3,
+            v2,
+            -- Moving average over last 100
+            avg(v2) over (order by id3 rows between 100 preceding and current row),
+            -- Moving average over last id1 rows
+            avg(v2) over (order by id3 rows between id1 preceding and current row)
+        FROM windowing
+        """,
+        # "SELECT * FROM windowing limit 2",
+    ]
+    for query in windowing_queries:
+        print(con.execute(query).fetchall())
+
+def window_rolling_sum(con):
+    windowing_queries = [
+        "DROP TABLE IF EXISTS windowing_results",
+        f"""
+        CREATE TABLE windowing_results AS
+        SELECT 
+            id1,
+            id2,
+            id3,
+            v2,
+            -- Rolling Sum
+            sum(v2) over (order by id3 rows between unbounded preceding and current row)
+        FROM windowing
+        """,
+        # "SELECT * FROM windowing limit 2",
+    ]
+    for query in windowing_queries:
+        print(con.execute(query).fetchall())
+
+def window_range_between(con):
+    windowing_queries = [
+        "DROP TABLE IF EXISTS windowing_results",
+        f"""
+        CREATE TABLE windowing_results AS
+        SELECT 
+            id1,
+            id2,
+            id3,
+            v2,
+            -- Range between a constant
+            sum(v2) over (order by v2 range between 3 preceding and current row),
+            -- Range between id1 values away
+            sum(v2) over (order by v2 range between id1 preceding and current row)
+        FROM windowing
+        """,
+        # "SELECT * FROM windowing limit 2",
+    ]
+    for query in windowing_queries:
+        print(con.execute(query).fetchall())
+
+def window_quantiles_partition_by(con):
+    windowing_queries = [
+        "DROP TABLE IF EXISTS windowing_results",
+        f"""
+        CREATE TABLE windowing_results AS
+        SELECT 
+            id1,
+            id2,
+            id3,
+            v2,
+            -- Plus partitioning:
+            quantile_cont(v2, [0, 0.25, 0.50, 0.75, 1]) over (partition by id2)
+        FROM windowing
+        """,
+        # "SELECT * FROM windowing limit 2",
+    ]
+    for query in windowing_queries:
+        print(con.execute(query).fetchall())
+
 # This needs to match the filename in the calling loop
 logger = SQLiteLogger('benchmark_log_python.db', delete_file=False)
 
@@ -280,9 +490,7 @@ if test_performance:
     for i in range(repeat):
         try:
             duckdb_version, scenario = get_duckdb_version_and_scenario()
-
             venv_location = str(Path(sys.executable).parent.parent)
-            
             con = connect_to_duckdb(venv_location, duckdb_version)
             
             time_and_log(pandas_test, con, 
@@ -358,9 +566,12 @@ if test_scale:
     ]
     for csv_file in csv_files:
         try:
+            duckdb_version, scenario = get_duckdb_version_and_scenario()
+            venv_location = str(Path(sys.executable).parent.parent)
             con = connect_to_duckdb(venv_location, duckdb_version)
             row_count = csv_file.split('/')[-1].split('_')[1]
             scenario = json.dumps({'duckdb_version':duckdb_version, "row_count":row_count})
+
             time_and_log(ingest_group_by_csv, con, csv_file, duckdb_version, versions_without_enums,
                         r=i, b='101 Group By Scale test: Create table from csv', s=scenario, l=logger)
             
@@ -428,4 +639,41 @@ if test_scale:
             con.close()
 
 if test_window_performance:
-    print("skipped em all!")
+    for i in range(repeat):
+        try:
+            duckdb_version, scenario = get_duckdb_version_and_scenario()
+            venv_location = str(Path(sys.executable).parent.parent)
+            con = connect_to_duckdb(venv_location, duckdb_version)
+
+            big_csv = str(Path(venv_location).parent) + '/_data/J1_1e7_1e7_0_0.csv'
+            time_and_log(ingest_windowing_csv, con, big_csv,
+                        r=i, b='301 Windowing performance test: Create tables from csvs windowing', s=scenario, l=logger)
+            
+            time_and_log(window_basic, con,
+                        r=i, b='302 Windowing performance test: Basic window', s=scenario, l=logger)
+            time_and_log(window_order_by, con,
+                        r=i, b='303 Windowing performance test: Sorted window', s=scenario, l=logger)
+            time_and_log(window_quantiles, con,
+                        r=i, b='304 Windowing performance test: Window quantiles entire dataset', s=scenario, l=logger)
+            time_and_log(window_partition_by, con,
+                        r=i, b='305 Windowing performance test: Window partition by', s=scenario, l=logger)
+            time_and_log(window_order_by_partition_by, con,
+                        r=i, b='306 Windowing performance test: Window partition by order by', s=scenario, l=logger)
+            time_and_log(window_lead_lag, con,
+                        r=i, b='307 Windowing performance test: Window lead and lag', s=scenario, l=logger)
+            time_and_log(window_moving_averages, con,
+                        r=i, b='308 Windowing performance test: Window moving averages', s=scenario, l=logger)
+            time_and_log(window_rolling_sum, con,
+                        r=i, b='309 Windowing performance test: Window rolling sum', s=scenario, l=logger)
+            time_and_log(window_range_between, con,
+                        r=i, b='310 Windowing performance test: Window range between', s=scenario, l=logger)
+            time_and_log(window_quantiles_partition_by, con,
+                        r=i, b='311 Windowing performance test: Window quantiles partition by', s=scenario, l=logger)
+            
+        except Exception as err:
+            import traceback
+            print("ERROR in duckdb_version", duckdb_version, 'row_count', row_count)
+            print(err)
+            print(traceback.print_exc())
+        finally:
+            con.close()

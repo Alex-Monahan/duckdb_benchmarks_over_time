@@ -9,6 +9,14 @@ from pathlib import Path
 
 from SQLiteLogger import SQLiteLogger
 
+repeat = 3
+versions_without_enums = ['0.2.7', '0.2.8', '0.2.9', '0.3.0', '0.3.1', '0.3.2', '0.3.3', '0.3.4', '0.4.0', '0.5.1']
+versions_without_pyarrow = ['0.2.7', '0.2.8', '0.2.9', '0.3.0']
+test_performance = False
+test_scale = False
+test_window_performance = True
+
+
 def delete_database(filename):
     db_filename = filename + '.duckdb'
     try:
@@ -268,158 +276,156 @@ def export_join_to_arrow(con):
 # This needs to match the filename in the calling loop
 logger = SQLiteLogger('benchmark_log_python.db', delete_file=False)
 
-repeat = 3
-versions_without_enums = ['0.2.7', '0.2.8', '0.2.9', '0.3.0', '0.3.1', '0.3.2', '0.3.3', '0.3.4', '0.4.0', '0.5.1']
-versions_without_pyarrow = ['0.2.7', '0.2.8', '0.2.9', '0.3.0']
+if test_performance:
+    for i in range(repeat):
+        try:
+            duckdb_version, scenario = get_duckdb_version_and_scenario()
 
-for i in range(repeat):
-    try:
-        duckdb_version, scenario = get_duckdb_version_and_scenario()
-
-        venv_location = str(Path(sys.executable).parent.parent)
-        
-        con = connect_to_duckdb(venv_location, duckdb_version)
-        
-        time_and_log(pandas_test, con, 
-                     r=i, b='001 Query pandas', s=scenario, l=logger)
-
-        csv_file = str(Path(venv_location).parent) + '/_data/G1_1e7_1e2_0_0.csv'
-        time_and_log(ingest_group_by_csv, con, csv_file, duckdb_version, versions_without_enums,
-                     r=i, b='002 Create table from csv', s=scenario, l=logger)
-        
-        if duckdb_version not in versions_without_enums:
-            time_and_log(convert_to_enums_group_by, con, duckdb_version,
-                        r=i, b='003 Convert to Enums', s=scenario, l=logger)
-
-        time_and_log(group_by_queries, con,
-                     r=i, b='004 Group by queries', s=scenario, l=logger)
-
-        pandas_df = time_and_log(export_group_by_to_pandas, con,
-                     r=i, b='005 Export group by results to Pandas', s=scenario, l=logger)
-
-        time_and_log(read_pandas, con, pandas_df,
-                     r=i, b='006 Scan and aggregate over Pandas df', s=scenario, l=logger)
-
-        parquet_file = time_and_log(export_group_by_to_parquet, con, venv_location,
-                     r=i, b='007 Export group by results to Parquet', s=scenario, l=logger)
-
-        time_and_log(read_parquet, con, parquet_file,
-                     r=i, b='008 Scan and aggregate over Parquet file', s=scenario, l=logger)
-
-        # Skip pyarrow tests on version 0.2.7-0.3.0 since numpy wouldn't compile correctly on M1 Mac
-        if not duckdb_version in versions_without_pyarrow: 
-            import pyarrow
-            arrow_df = time_and_log(export_group_by_to_arrow, con,
-                     r=i, b='009 Export group by results to Arrow', s=scenario, l=logger)
+            venv_location = str(Path(sys.executable).parent.parent)
             
-            time_and_log(read_arrow, con, arrow_df,
-                     r=i, b='010 Scan and aggregate over Arrow df', s=scenario, l=logger)
+            con = connect_to_duckdb(venv_location, duckdb_version)
+            
+            time_and_log(pandas_test, con, 
+                        r=i, b='001 Query pandas', s=scenario, l=logger)
 
-        x_csv = str(Path(venv_location).parent) + '/_data/J1_1e7_NA_0_0.csv'
-        small_csv = str(Path(venv_location).parent) + '/_data/J1_1e7_1e1_0_0.csv'
-        medium_csv = str(Path(venv_location).parent) + '/_data/J1_1e7_1e4_0_0.csv'
-        big_csv = str(Path(venv_location).parent) + '/_data/J1_1e7_1e7_0_0.csv'
-        time_and_log(ingest_join_csvs, con, x_csv, small_csv, medium_csv, big_csv, duckdb_version, versions_without_enums,
-                     r=i, b='011 Create tables from csvs joins', s=scenario, l=logger)
+            csv_file = str(Path(venv_location).parent) + '/_data/G1_1e7_1e2_0_0.csv'
+            time_and_log(ingest_group_by_csv, con, csv_file, duckdb_version, versions_without_enums,
+                        r=i, b='002 Create table from csv', s=scenario, l=logger)
+            
+            if duckdb_version not in versions_without_enums:
+                time_and_log(convert_to_enums_group_by, con, duckdb_version,
+                            r=i, b='003 Convert to Enums', s=scenario, l=logger)
 
-        if duckdb_version not in versions_without_enums:
-            time_and_log(convert_to_enums_joins, con,
-                     r=i, b='012 Convert to Enums for joins', s=scenario, l=logger)
+            time_and_log(group_by_queries, con,
+                        r=i, b='004 Group by queries', s=scenario, l=logger)
 
-        time_and_log(join_queries, con,
-                     r=i, b='013 Join queries', s=scenario, l=logger)
+            pandas_df = time_and_log(export_group_by_to_pandas, con,
+                        r=i, b='005 Export group by results to Pandas', s=scenario, l=logger)
 
-        time_and_log(export_join_results_to_pandas, con,
-                     r=i, b='014 Export join results to Pandas', s=scenario, l=logger)
+            time_and_log(read_pandas, con, pandas_df,
+                        r=i, b='006 Scan and aggregate over Pandas df', s=scenario, l=logger)
 
-        # Skip pyarrow tests on version 0.2.7-0.3.0 since numpy wouldn't compile correctly
-        if not duckdb_version in versions_without_pyarrow: 
-            time_and_log(export_join_to_arrow, con,
-                     r=i, b='015 Export join results to Arrow', s=scenario, l=logger)
+            parquet_file = time_and_log(export_group_by_to_parquet, con, venv_location,
+                        r=i, b='007 Export group by results to Parquet', s=scenario, l=logger)
 
-    except Exception as err:
-        import traceback
-        print("ERROR in duckdb_version",duckdb_version)
-        print(err)
-        print(traceback.print_exc())
-    finally:
-        con.close()
+            time_and_log(read_parquet, con, parquet_file,
+                        r=i, b='008 Scan and aggregate over Parquet file', s=scenario, l=logger)
 
-# Group by - see if we OOM!
-csv_files = [
-    str(Path(venv_location).parent) + '/_data/G1_1e8_1e2_0_0.csv',
-    str(Path(venv_location).parent) + '/_data/G1_1e9_1e2_0_0.csv'
-]
-for csv_file in csv_files:
-    try:
-        con = connect_to_duckdb(venv_location, duckdb_version)
-        row_count = csv_file.split('/')[-1].split('_')[1]
-        scenario = json.dumps({'duckdb_version':duckdb_version, "row_count":row_count})
-        time_and_log(ingest_group_by_csv, con, csv_file, duckdb_version, versions_without_enums,
-                    r=i, b='101 Group By Scale test: Create table from csv', s=scenario, l=logger)
+            # Skip pyarrow tests on version 0.2.7-0.3.0 since numpy wouldn't compile correctly on M1 Mac
+            if not duckdb_version in versions_without_pyarrow: 
+                import pyarrow
+                arrow_df = time_and_log(export_group_by_to_arrow, con,
+                        r=i, b='009 Export group by results to Arrow', s=scenario, l=logger)
+                
+                time_and_log(read_arrow, con, arrow_df,
+                        r=i, b='010 Scan and aggregate over Arrow df', s=scenario, l=logger)
+
+            x_csv = str(Path(venv_location).parent) + '/_data/J1_1e7_NA_0_0.csv'
+            small_csv = str(Path(venv_location).parent) + '/_data/J1_1e7_1e1_0_0.csv'
+            medium_csv = str(Path(venv_location).parent) + '/_data/J1_1e7_1e4_0_0.csv'
+            big_csv = str(Path(venv_location).parent) + '/_data/J1_1e7_1e7_0_0.csv'
+            time_and_log(ingest_join_csvs, con, x_csv, small_csv, medium_csv, big_csv, duckdb_version, versions_without_enums,
+                        r=i, b='011 Create tables from csvs joins', s=scenario, l=logger)
+
+            if duckdb_version not in versions_without_enums:
+                time_and_log(convert_to_enums_joins, con,
+                        r=i, b='012 Convert to Enums for joins', s=scenario, l=logger)
+
+            time_and_log(join_queries, con,
+                        r=i, b='013 Join queries', s=scenario, l=logger)
+
+            time_and_log(export_join_results_to_pandas, con,
+                        r=i, b='014 Export join results to Pandas', s=scenario, l=logger)
+
+            # Skip pyarrow tests on version 0.2.7-0.3.0 since numpy wouldn't compile correctly
+            if not duckdb_version in versions_without_pyarrow: 
+                time_and_log(export_join_to_arrow, con,
+                        r=i, b='015 Export join results to Arrow', s=scenario, l=logger)
+
+        except Exception as err:
+            import traceback
+            print("ERROR in duckdb_version",duckdb_version)
+            print(err)
+            print(traceback.print_exc())
+        finally:
+            con.close()
+
+if test_scale:
+    # Group by - see if we OOM!
+    csv_files = [
+        str(Path(venv_location).parent) + '/_data/G1_1e8_1e2_0_0.csv',
+        str(Path(venv_location).parent) + '/_data/G1_1e9_1e2_0_0.csv'
+    ]
+    for csv_file in csv_files:
+        try:
+            con = connect_to_duckdb(venv_location, duckdb_version)
+            row_count = csv_file.split('/')[-1].split('_')[1]
+            scenario = json.dumps({'duckdb_version':duckdb_version, "row_count":row_count})
+            time_and_log(ingest_group_by_csv, con, csv_file, duckdb_version, versions_without_enums,
+                        r=i, b='101 Group By Scale test: Create table from csv', s=scenario, l=logger)
+            
+            if duckdb_version not in versions_without_enums:
+                time_and_log(convert_to_enums_group_by, con, duckdb_version,
+                            r=i, b='102 Group By Scale test: Convert to Enums', s=scenario, l=logger)
+
+            time_and_log(group_by_queries, con,
+                        r=i, b='103 Group By Scale test: Group by queries', s=scenario, l=logger)
         
-        if duckdb_version not in versions_without_enums:
-            time_and_log(convert_to_enums_group_by, con, duckdb_version,
-                        r=i, b='102 Group By Scale test: Convert to Enums', s=scenario, l=logger)
+        except Exception as err:
+            import traceback
+            print("ERROR in duckdb_version", duckdb_version, 'row_count', row_count)
+            print(err)
+            print(traceback.print_exc())
+            # No need to try a larger file if the other failed already
+            break
+        finally:
+            con.close()
 
-        time_and_log(group_by_queries, con,
-                    r=i, b='103 Group By Scale test: Group by queries', s=scenario, l=logger)
-    
-    except Exception as err:
-        import traceback
-        print("ERROR in duckdb_version", duckdb_version, 'row_count', row_count)
-        print(err)
-        print(traceback.print_exc())
-        # No need to try a larger file if the other failed already
-        break
-    finally:
-        con.close()
+    # Join - see if we OOM!
+    join_csv_files = [
+        {
+            'x_csv' :str(Path(venv_location).parent) + '/_data/J1_1e8_NA_0_0.csv',
+            'small_csv': str(Path(venv_location).parent) + '/_data/J1_1e8_1e2_0_0.csv',
+            'medium_csv': str(Path(venv_location).parent) + '/_data/J1_1e8_1e5_0_0.csv',
+            'big_csv': str(Path(venv_location).parent) + '/_data/J1_1e8_1e8_0_0.csv',
+        },
+        # {
+        #     'x_csv' :str(Path(venv_location).parent) + '/_data/J1_1e9_NA_0_0.csv',
+        #     'small_csv': str(Path(venv_location).parent) + '/_data/J1_1e9_1e3_0_0.csv',
+        #     'medium_csv': str(Path(venv_location).parent) + '/_data/J1_1e9_1e6_0_0.csv',
+        #     'big_csv': str(Path(venv_location).parent) + '/_data/J1_1e9_1e9_0_0.csv',
+        # },
+    ]
+    for csv_file_dict in join_csv_files:
+        try:
+            con = connect_to_duckdb(venv_location, duckdb_version)
+            x_csv = csv_file_dict['x_csv']
+            small_csv = csv_file_dict['small_csv']
+            medium_csv = csv_file_dict['medium_csv']
+            big_csv = csv_file_dict['big_csv']
 
-# Join - see if we OOM!
-join_csv_files = [
-    {
-        'x_csv' :str(Path(venv_location).parent) + '/_data/J1_1e8_NA_0_0.csv',
-        'small_csv': str(Path(venv_location).parent) + '/_data/J1_1e8_1e2_0_0.csv',
-        'medium_csv': str(Path(venv_location).parent) + '/_data/J1_1e8_1e5_0_0.csv',
-        'big_csv': str(Path(venv_location).parent) + '/_data/J1_1e8_1e8_0_0.csv',
-    },
-    {
-        'x_csv' :str(Path(venv_location).parent) + '/_data/J1_1e9_NA_0_0.csv',
-        'small_csv': str(Path(venv_location).parent) + '/_data/J1_1e9_1e3_0_0.csv',
-        'medium_csv': str(Path(venv_location).parent) + '/_data/J1_1e9_1e6_0_0.csv',
-        'big_csv': str(Path(venv_location).parent) + '/_data/J1_1e9_1e9_0_0.csv',
-    },
-]
-for csv_file_dict in join_csv_files:
-    try:
-        con = connect_to_duckdb(venv_location, duckdb_version)
-        x_csv = csv_file_dict['x_csv']
-        small_csv = csv_file_dict['small_csv']
-        medium_csv = csv_file_dict['medium_csv']
-        big_csv = csv_file_dict['big_csv']
+            row_count = x_csv.split('/')[-1].split('_')[1]
+            scenario = json.dumps({'duckdb_version':duckdb_version, "row_count":row_count})
 
-        row_count = x_csv.split('/')[-1].split('_')[1]
-        scenario = json.dumps({'duckdb_version':duckdb_version, "row_count":row_count})
+            time_and_log(ingest_join_csvs, con, x_csv, small_csv, medium_csv, big_csv, duckdb_version, versions_without_enums,
+                        r=i, b='201 Join Scale test: Create tables from csvs joins', s=scenario, l=logger)
 
-        time_and_log(ingest_join_csvs, con, x_csv, small_csv, medium_csv, big_csv, duckdb_version, versions_without_enums,
-                     r=i, b='201 Join Scale test: Create tables from csvs joins', s=scenario, l=logger)
+            if duckdb_version not in versions_without_enums:
+                time_and_log(convert_to_enums_joins, con,
+                        r=i, b='202 Join Scale test: Convert to Enums for joins', s=scenario, l=logger)
 
-        if duckdb_version not in versions_without_enums:
-            time_and_log(convert_to_enums_joins, con,
-                     r=i, b='202 Join Scale test: Convert to Enums for joins', s=scenario, l=logger)
+            time_and_log(join_queries, con,
+                        r=i, b='203 Join Scale test: Join queries', s=scenario, l=logger)
+        
+        except Exception as err:
+            import traceback
+            print("ERROR in duckdb_version", duckdb_version, 'row_count', row_count)
+            print(err)
+            print(traceback.print_exc())
+            # No need to try a larger file if the other failed already
+            break
+        finally:
+            con.close()
 
-        time_and_log(join_queries, con,
-                     r=i, b='203 Join Scale test: Join queries', s=scenario, l=logger)
-    
-    except Exception as err:
-        import traceback
-        print("ERROR in duckdb_version", duckdb_version, 'row_count', row_count)
-        print(err)
-        print(traceback.print_exc())
-        # No need to try a larger file if the other failed already
-        break
-    finally:
-        con.close()
-
-# TODO: S3 Parquet reader / writer? 
-
+if test_window_performance:
+    print("skipped em all!")

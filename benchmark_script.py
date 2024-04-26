@@ -12,6 +12,8 @@ from SQLiteLogger import SQLiteLogger
 repeat = 3
 versions_without_enums = ['0.2.7', '0.2.8', '0.2.9', '0.3.0', '0.3.1', '0.3.2', '0.3.3', '0.3.4', '0.4.0', '0.5.1']
 versions_without_pyarrow = ['0.2.7', '0.2.8', '0.2.9', '0.3.0']
+versions_without_window_ranges = ['0.2.7']
+versions_failing_on_quantiles = ['0.2.7', '0.2.8', '0.2.9', '0.3.0', '0.3.1', '0.3.2', '0.3.3', '0.3.4', '0.4.0', '0.5.1', '0.6.1', '0.7.1']
 test_performance = False
 test_scale = False
 test_window_performance = True
@@ -295,7 +297,7 @@ def window_basic(con):
             id2,
             id3,
             v2,
-            sum(v2) over ()
+            sum(v2) over () as window_basic
         FROM windowing
         """,
         # "SELECT * FROM windowing limit 2",
@@ -314,9 +316,9 @@ def window_order_by(con):
             id3,
             v2,
             -- Benchmark the sorting alone
-            first(v2) over (order by id3),
+            first(v2) over (order by id3) as first_order_by,
             -- Typical row_number
-            row_number() over (order by id3)
+            row_number() over (order by id3) as row_number_order_by
         FROM windowing
         """,
         # "SELECT * FROM windowing limit 2",
@@ -334,7 +336,7 @@ def window_quantiles(con):
             id2,
             id3,
             v2,
-            quantile_cont(v2, [0, 0.25, 0.50, 0.75, 1]) over ()
+            quantile_cont(v2, [0, 0.25, 0.50, 0.75, 1]) over () as quantile_entire_dataset
         FROM windowing
         """,
         # "SELECT * FROM windowing limit 2",
@@ -353,9 +355,9 @@ def window_partition_by(con):
             id3,
             v2,
             -- Sum over partition by
-            sum(v2) over (partition by id1),
-            sum(v2) over (partition by id2),
-            sum(v2) over (partition by id3)
+            sum(v2) over (partition by id1) as sum_by_id1,
+            sum(v2) over (partition by id2) as sum_by_id2,
+            sum(v2) over (partition by id3) as sum_by_id3
         FROM windowing
         """,
         # "SELECT * FROM windowing limit 2",
@@ -374,7 +376,7 @@ def window_order_by_partition_by(con):
             id3,
             v2,
             -- Benchmark sorting within partitions
-            first(v2) over (partition by id2 order by id3)
+            first(v2) over (partition by id2 order by id3) as first_by_id2_ordered_by_id3
         FROM windowing
         """,
         # "SELECT * FROM windowing limit 2",
@@ -393,9 +395,9 @@ def window_lead_lag(con):
             id3,
             v2,
             -- Lag
-            first(v2) over (order by id3 rows between 1 preceding and 1 preceding),
+            first(v2) over (order by id3 rows between 1 preceding and 1 preceding) as my_lag,
             -- Lead
-            first(v2) over (order by id3 rows between 1 following and 1 following)
+            first(v2) over (order by id3 rows between 1 following and 1 following) as my_lead
         FROM windowing
         """,
         # "SELECT * FROM windowing limit 2",
@@ -414,9 +416,9 @@ def window_moving_averages(con):
             id3,
             v2,
             -- Moving average over last 100
-            avg(v2) over (order by id3 rows between 100 preceding and current row),
+            avg(v2) over (order by id3 rows between 100 preceding and current row) as my_moving_average,
             -- Moving average over last id1 rows
-            avg(v2) over (order by id3 rows between id1 preceding and current row)
+            avg(v2) over (order by id3 rows between id1 preceding and current row) as my_dynamic_moving_average
         FROM windowing
         """,
         # "SELECT * FROM windowing limit 2",
@@ -435,7 +437,7 @@ def window_rolling_sum(con):
             id3,
             v2,
             -- Rolling Sum
-            sum(v2) over (order by id3 rows between unbounded preceding and current row)
+            sum(v2) over (order by id3 rows between unbounded preceding and current row) as my_rolling_sum
         FROM windowing
         """,
         # "SELECT * FROM windowing limit 2",
@@ -454,9 +456,9 @@ def window_range_between(con):
             id3,
             v2,
             -- Range between a constant
-            sum(v2) over (order by v2 range between 3 preceding and current row),
+            sum(v2) over (order by v2 range between 3 preceding and current row) as my_range_between,
             -- Range between id1 values away
-            sum(v2) over (order by v2 range between id1 preceding and current row)
+            sum(v2) over (order by v2 range between id1 preceding and current row) as my_dynamic_range_between
         FROM windowing
         """,
         # "SELECT * FROM windowing limit 2",
@@ -475,7 +477,107 @@ def window_quantiles_partition_by(con):
             id3,
             v2,
             -- Plus partitioning:
-            quantile_cont(v2, [0, 0.25, 0.50, 0.75, 1]) over (partition by id2)
+            quantile_cont(v2, [0, 0.25, 0.50, 0.75, 1]) over (partition by id2) as my_quantiles_by_id2
+        FROM windowing
+        """,
+        # "SELECT * FROM windowing limit 2",
+    ]
+    for query in windowing_queries:
+        print(con.execute(query).fetchall())
+
+def window_lead_lag_partition_by(con):
+    windowing_queries = [
+        "DROP TABLE IF EXISTS windowing_results",
+        f"""
+        CREATE TABLE windowing_results AS
+        SELECT 
+            id1,
+            id2,
+            id3,
+            v2,
+            -- Lag
+            first(v2) over (partition by id2 order by id3 rows between 1 preceding and 1 preceding) as my_lag_by_id2,
+            -- Lead
+            first(v2) over (partition by id2 order by id3 rows between 1 following and 1 following) as my_lead_by_id2
+        FROM windowing
+        """,
+        # "SELECT * FROM windowing limit 2",
+    ]
+    for query in windowing_queries:
+        print(con.execute(query).fetchall())
+
+def window_moving_averages_partition_by(con):
+    windowing_queries = [
+        "DROP TABLE IF EXISTS windowing_results",
+        f"""
+        CREATE TABLE windowing_results AS
+        SELECT 
+            id1,
+            id2,
+            id3,
+            v2,
+            -- Moving average over last 100
+            avg(v2) over (partition by id2 order by id3 rows between 100 preceding and current row) as my_moving_average_by_id2,
+            -- Moving average over last id1 rows
+            avg(v2) over (partition by id2 order by id3 rows between id1 preceding and current row) as my_dynamic_moving_average_by_id2
+        FROM windowing
+        """,
+        # "SELECT * FROM windowing limit 2",
+    ]
+    for query in windowing_queries:
+        print(con.execute(query).fetchall())
+
+def window_rolling_sum_partition_by(con):
+    windowing_queries = [
+        "DROP TABLE IF EXISTS windowing_results",
+        f"""
+        CREATE TABLE windowing_results AS
+        SELECT 
+            id1,
+            id2,
+            id3,
+            v2,
+            -- Rolling Sum
+            sum(v2) over (partition by id2 order by id3 rows between unbounded preceding and current row) as my_rolling_sum_by_id2
+        FROM windowing
+        """,
+        # "SELECT * FROM windowing limit 2",
+    ]
+    for query in windowing_queries:
+        print(con.execute(query).fetchall())
+
+def window_range_between_partition_by(con):
+    windowing_queries = [
+        "DROP TABLE IF EXISTS windowing_results",
+        f"""
+        CREATE TABLE windowing_results AS
+        SELECT 
+            id1,
+            id2,
+            id3,
+            v2,
+            -- Range between a constant
+            sum(v2) over (partition by id2 order by v2 range between 3 preceding and current row) as my_range_between_by_id2,
+            -- Range between id1 values away
+            sum(v2) over (partition by id2 order by v2 range between id1 preceding and current row) as my_dynamic_range_between_by_id2
+        FROM windowing
+        """,
+        # "SELECT * FROM windowing limit 2",
+    ]
+    for query in windowing_queries:
+        print(con.execute(query).fetchall())
+
+def window_quantiles_partition_by_rows_between(con):
+    windowing_queries = [
+        "DROP TABLE IF EXISTS windowing_results",
+        f"""
+        CREATE TABLE windowing_results AS
+        SELECT 
+            id1,
+            id2,
+            id3,
+            v2,
+            quantile_cont(v2, [0, 0.25, 0.50, 0.75, 1]) over (partition by id2 order by id3 rows between 100 preceding and current row) as my_quantiles_by_id2_rows_between
         FROM windowing
         """,
         # "SELECT * FROM windowing limit 2",
@@ -646,6 +748,7 @@ if test_window_performance:
             con = connect_to_duckdb(venv_location, duckdb_version)
 
             big_csv = str(Path(venv_location).parent) + '/_data/J1_1e7_1e7_0_0.csv'
+            row_count = big_csv.split('/')[-1].split('_')[1]
             time_and_log(ingest_windowing_csv, con, big_csv,
                         r=i, b='301 Windowing performance test: Create tables from csvs windowing', s=scenario, l=logger)
             
@@ -653,23 +756,44 @@ if test_window_performance:
                         r=i, b='302 Windowing performance test: Basic window', s=scenario, l=logger)
             time_and_log(window_order_by, con,
                         r=i, b='303 Windowing performance test: Sorted window', s=scenario, l=logger)
-            time_and_log(window_quantiles, con,
-                        r=i, b='304 Windowing performance test: Window quantiles entire dataset', s=scenario, l=logger)
+            if duckdb_version not in versions_failing_on_quantiles:
+                time_and_log(window_quantiles, con,
+                            r=i, b='304 Windowing performance test: Window quantiles entire dataset', s=scenario, l=logger)
+
             time_and_log(window_partition_by, con,
                         r=i, b='305 Windowing performance test: Window partition by', s=scenario, l=logger)
             time_and_log(window_order_by_partition_by, con,
                         r=i, b='306 Windowing performance test: Window partition by order by', s=scenario, l=logger)
+            
             time_and_log(window_lead_lag, con,
                         r=i, b='307 Windowing performance test: Window lead and lag', s=scenario, l=logger)
             time_and_log(window_moving_averages, con,
                         r=i, b='308 Windowing performance test: Window moving averages', s=scenario, l=logger)
             time_and_log(window_rolling_sum, con,
                         r=i, b='309 Windowing performance test: Window rolling sum', s=scenario, l=logger)
-            time_and_log(window_range_between, con,
-                        r=i, b='310 Windowing performance test: Window range between', s=scenario, l=logger)
-            time_and_log(window_quantiles_partition_by, con,
-                        r=i, b='311 Windowing performance test: Window quantiles partition by', s=scenario, l=logger)
+            if duckdb_version not in versions_without_window_ranges:
+                time_and_log(window_range_between, con,
+                            r=i, b='310 Windowing performance test: Window range between', s=scenario, l=logger)
             
+            
+            
+            time_and_log(window_lead_lag_partition_by, con,
+                        r=i, b='312 Windowing performance test: Window lead and lag partition by', s=scenario, l=logger)
+            time_and_log(window_moving_averages_partition_by, con,
+                        r=i, b='313 Windowing performance test: Window moving averages partition by', s=scenario, l=logger)
+            time_and_log(window_rolling_sum_partition_by, con,
+                        r=i, b='314 Windowing performance test: Window rolling sum partition by', s=scenario, l=logger)
+            if duckdb_version not in versions_without_window_ranges:
+                time_and_log(window_range_between_partition_by, con,
+                            r=i, b='315 Windowing performance test: Window range between partition by', s=scenario, l=logger)
+
+            # Testing these last
+            time_and_log(window_quantiles_partition_by, con,
+                            r=i, b='311 Windowing performance test: Window quantiles partition by', s=scenario, l=logger)
+
+            time_and_log(window_quantiles_partition_by_rows_between, con,
+                        r=i, b='316 Windowing performance test: Window quantiles partition by rows between', s=scenario, l=logger)
+
         except Exception as err:
             import traceback
             print("ERROR in duckdb_version", duckdb_version, 'row_count', row_count)

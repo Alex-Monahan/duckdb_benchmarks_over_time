@@ -13,11 +13,11 @@ repeat = 3
 versions_without_enums = ['0.2.7', '0.2.8', '0.2.9', '0.3.0', '0.3.1', '0.3.2', '0.3.3', '0.3.4', '0.4.0', '0.5.1']
 versions_without_pyarrow = ['0.2.7', '0.2.8', '0.2.9', '0.3.0']
 versions_without_window_ranges = ['0.2.7']
-versions_failing_on_quantiles = ['0.2.7', '0.2.8', '0.2.9', '0.3.0', '0.3.1', '0.3.2', '0.3.3', '0.3.4', '0.4.0', '0.5.1', '0.6.1', '0.7.1']
-test_performance = False
-test_scale = False
+versions_failing_on_quantiles_full_dataset = ['0.2.7', '0.2.8', '0.2.9', '0.3.0', '0.3.1', '0.3.2', '0.3.3', '0.3.4', '0.4.0', '0.5.1', '0.6.1', '0.7.1']
+versions_failing_on_quantiles = ['0.2.7', '0.2.8', '0.2.9', '0.3.0', '0.3.1']
+test_performance = True
 test_window_performance = True
-
+test_scale = True
 
 def delete_database(filename):
     db_filename = filename + '.duckdb'
@@ -660,6 +660,69 @@ if test_performance:
         finally:
             con.close()
 
+if test_window_performance:
+    for i in range(repeat):
+        try:
+            duckdb_version, scenario = get_duckdb_version_and_scenario()
+            venv_location = str(Path(sys.executable).parent.parent)
+            con = connect_to_duckdb(venv_location, duckdb_version)
+
+            big_csv = str(Path(venv_location).parent) + '/_data/J1_1e7_1e7_0_0.csv'
+            row_count = big_csv.split('/')[-1].split('_')[1]
+            time_and_log(ingest_windowing_csv, con, big_csv,
+                        r=i, b='301 Windowing performance test: Create tables from csvs windowing', s=scenario, l=logger)
+            
+            time_and_log(window_basic, con,
+                        r=i, b='302 Windowing performance test: Basic window', s=scenario, l=logger)
+            time_and_log(window_order_by, con,
+                        r=i, b='303 Windowing performance test: Sorted window', s=scenario, l=logger)
+            if duckdb_version not in versions_failing_on_quantiles_full_dataset:
+                time_and_log(window_quantiles, con,
+                            r=i, b='304 Windowing performance test: Window quantiles entire dataset', s=scenario, l=logger)
+
+            time_and_log(window_partition_by, con,
+                        r=i, b='305 Windowing performance test: Window partition by', s=scenario, l=logger)
+            time_and_log(window_order_by_partition_by, con,
+                        r=i, b='306 Windowing performance test: Window partition by order by', s=scenario, l=logger)
+            
+            time_and_log(window_lead_lag, con,
+                        r=i, b='307 Windowing performance test: Window lead and lag', s=scenario, l=logger)
+            time_and_log(window_moving_averages, con,
+                        r=i, b='308 Windowing performance test: Window moving averages', s=scenario, l=logger)
+            time_and_log(window_rolling_sum, con,
+                        r=i, b='309 Windowing performance test: Window rolling sum', s=scenario, l=logger)
+            if duckdb_version not in versions_without_window_ranges:
+                time_and_log(window_range_between, con,
+                            r=i, b='310 Windowing performance test: Window range between', s=scenario, l=logger)
+            
+            
+            
+            time_and_log(window_lead_lag_partition_by, con,
+                        r=i, b='312 Windowing performance test: Window lead and lag partition by', s=scenario, l=logger)
+            time_and_log(window_moving_averages_partition_by, con,
+                        r=i, b='313 Windowing performance test: Window moving averages partition by', s=scenario, l=logger)
+            time_and_log(window_rolling_sum_partition_by, con,
+                        r=i, b='314 Windowing performance test: Window rolling sum partition by', s=scenario, l=logger)
+            if duckdb_version not in versions_without_window_ranges:
+                time_and_log(window_range_between_partition_by, con,
+                            r=i, b='315 Windowing performance test: Window range between partition by', s=scenario, l=logger)
+
+            # Testing these last
+            if duckdb_version not in versions_failing_on_quantiles:
+                time_and_log(window_quantiles_partition_by, con,
+                                r=i, b='311 Windowing performance test: Window quantiles partition by', s=scenario, l=logger)
+
+                time_and_log(window_quantiles_partition_by_rows_between, con,
+                            r=i, b='316 Windowing performance test: Window quantiles partition by rows between', s=scenario, l=logger)
+
+        except Exception as err:
+            import traceback
+            print("ERROR in duckdb_version", duckdb_version, 'row_count', row_count)
+            print(err)
+            print(traceback.print_exc())
+        finally:
+            con.close()
+
 if test_scale:
     # Group by - see if we OOM!
     csv_files = [
@@ -740,64 +803,3 @@ if test_scale:
         finally:
             con.close()
 
-if test_window_performance:
-    for i in range(repeat):
-        try:
-            duckdb_version, scenario = get_duckdb_version_and_scenario()
-            venv_location = str(Path(sys.executable).parent.parent)
-            con = connect_to_duckdb(venv_location, duckdb_version)
-
-            big_csv = str(Path(venv_location).parent) + '/_data/J1_1e7_1e7_0_0.csv'
-            row_count = big_csv.split('/')[-1].split('_')[1]
-            time_and_log(ingest_windowing_csv, con, big_csv,
-                        r=i, b='301 Windowing performance test: Create tables from csvs windowing', s=scenario, l=logger)
-            
-            time_and_log(window_basic, con,
-                        r=i, b='302 Windowing performance test: Basic window', s=scenario, l=logger)
-            time_and_log(window_order_by, con,
-                        r=i, b='303 Windowing performance test: Sorted window', s=scenario, l=logger)
-            if duckdb_version not in versions_failing_on_quantiles:
-                time_and_log(window_quantiles, con,
-                            r=i, b='304 Windowing performance test: Window quantiles entire dataset', s=scenario, l=logger)
-
-            time_and_log(window_partition_by, con,
-                        r=i, b='305 Windowing performance test: Window partition by', s=scenario, l=logger)
-            time_and_log(window_order_by_partition_by, con,
-                        r=i, b='306 Windowing performance test: Window partition by order by', s=scenario, l=logger)
-            
-            time_and_log(window_lead_lag, con,
-                        r=i, b='307 Windowing performance test: Window lead and lag', s=scenario, l=logger)
-            time_and_log(window_moving_averages, con,
-                        r=i, b='308 Windowing performance test: Window moving averages', s=scenario, l=logger)
-            time_and_log(window_rolling_sum, con,
-                        r=i, b='309 Windowing performance test: Window rolling sum', s=scenario, l=logger)
-            if duckdb_version not in versions_without_window_ranges:
-                time_and_log(window_range_between, con,
-                            r=i, b='310 Windowing performance test: Window range between', s=scenario, l=logger)
-            
-            
-            
-            time_and_log(window_lead_lag_partition_by, con,
-                        r=i, b='312 Windowing performance test: Window lead and lag partition by', s=scenario, l=logger)
-            time_and_log(window_moving_averages_partition_by, con,
-                        r=i, b='313 Windowing performance test: Window moving averages partition by', s=scenario, l=logger)
-            time_and_log(window_rolling_sum_partition_by, con,
-                        r=i, b='314 Windowing performance test: Window rolling sum partition by', s=scenario, l=logger)
-            if duckdb_version not in versions_without_window_ranges:
-                time_and_log(window_range_between_partition_by, con,
-                            r=i, b='315 Windowing performance test: Window range between partition by', s=scenario, l=logger)
-
-            # Testing these last
-            time_and_log(window_quantiles_partition_by, con,
-                            r=i, b='311 Windowing performance test: Window quantiles partition by', s=scenario, l=logger)
-
-            time_and_log(window_quantiles_partition_by_rows_between, con,
-                        r=i, b='316 Windowing performance test: Window quantiles partition by rows between', s=scenario, l=logger)
-
-        except Exception as err:
-            import traceback
-            print("ERROR in duckdb_version", duckdb_version, 'row_count', row_count)
-            print(err)
-            print(traceback.print_exc())
-        finally:
-            con.close()

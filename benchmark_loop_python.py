@@ -11,6 +11,8 @@ import subprocess
 import shutil
 import duckdb
 from threading import Thread
+import os
+from contextlib import redirect_stdout
 
 from SQLiteLogger import SQLiteLogger
 
@@ -133,84 +135,101 @@ def log_on_regular_cadence(total_time, interval):
         time.sleep(interval)
 
 
+log_path = './logs/'
+if not os.path.exists(log_path):
+    os.makedirs(log_path)
+filename = log_path + 'log.txt'
+runtime = datetime.now().isoformat(sep=' ')
+try:
+    shutil.move(filename,filename.replace('log.txt',f'archived_at_{runtime}_log.txt'))
+    os.remove(filename)
+except:
+    pass
+
+shutil.move('benchmark_log_python.db','benchmark_log_python.db'.replace('.db',f'archived_at_{runtime}.db'))
+
+with open(filename, 'a') as f:
+    with redirect_stdout(f):
+        print('Starting run')
+        # Deduce the correct pandas version
+        con = duckdb.connect()
+        pandas_versions = con.execute("from 'pandas_versions.csv'").df()
+        # print(pandas_versions)
+        pyarrow_versions = con.execute("from 'pyarrow_versions.csv'").df()
+        # print(pyarrow_versions)
+
+        logger = SQLiteLogger('benchmark_log_python.db', delete_file=True)
 
 
-# Deduce the correct pandas version
-con = duckdb.connect()
-pandas_versions = con.execute("from 'pandas_versions.csv'").df()
-print(pandas_versions)
-pyarrow_versions = con.execute("from 'pyarrow_versions.csv'").df()
-print(pyarrow_versions)
+        # SELECT  
+        #   name,
+        #   version,
+        #   max(upload_time) as max_upload_time
+        # FROM `bigquery-public-data.pypi.distribution_metadata` 
+        # WHERE 
+        #   name = 'pyarrow'
+        #   and version not like '%.post%'
+        # group by
+        #   name,
+        #   version
+        # order by 
+        #   max_upload_time desc
 
-logger = SQLiteLogger('benchmark_log_python.db', delete_file=True)
+        # TODO: REMOVE. Filter down the versions for testing
+        create_environments = False
+        run_scripts = True
+        # versions_to_test = ['0.2.7']
+        # versions_to_test = ['0.3.1']
+        # versions_to_test = ['0.2.7', '0.2.8', '0.2.9', '0.3.0', '0.3.1', '0.3.2', '0.3.4', '0.4.0', '0.5.1', '0.6.1', '0.7.1']
+        # versions_to_test = ['0.2.7', '0.7.1', '0.8.1', '0.10.2']
+        # versions_to_test = ['0.2.8','0.2.9','0.3.0']
+        # versions = {k: versions.get(k) for k in versions_to_test}
 
+        # t = Thread(target=log_on_regular_cadence,args=(1000000,300,))
+        t = Thread(target=log_on_regular_cadence,args=(1000000,10,))
+        t.start()
+        print('Background logging thread started')
 
-# SELECT  
-#   name,
-#   version,
-#   max(upload_time) as max_upload_time
-# FROM `bigquery-public-data.pypi.distribution_metadata` 
-# WHERE 
-#   name = 'pyarrow'
-#   and version not like '%.post%'
-# group by
-#   name,
-#   version
-# order by 
-#   max_upload_time desc
+        for version, details in versions.items().__reversed__():
+        # for version, details in versions.items():
+            latest_pandas_version = con.execute(f"""
+                from pandas_versions 
+                select 
+                    max_by(version,max_upload_time) as max_version
+                where
+                    max_upload_time <= '{details['date']}'::datetime
+                    and version not ilike '%rc%'
+                """).fetchall()[0][0]
 
-# TODO: REMOVE. Filter down the versions for testing
-create_environments = False
-run_scripts = True
-# versions_to_test = ['0.2.7']
-# versions_to_test = ['0.10.2']
-# versions_to_test = ['0.2.8','0.2.9','0.3.0']
-# versions = {k: versions.get(k) for k in versions_to_test}
+            latest_pyarrow_version = con.execute(f"""
+                from pyarrow_versions 
+                select 
+                    max_by(version,max_upload_time) as max_version
+                where
+                    max_upload_time <= '{details['date']}'::datetime
+                """).fetchall()[0][0]
+            
+            # # Pyarrow 5.0.0 is broken, and 4.0.1 does not compile numpy
+            # if latest_pyarrow_version == '5.0.0':
+            #     latest_pyarrow_version = '4.0.1'
+            # print('DuckDB version:',version,'Pandas version:',latest_pandas_version,'Pyarrow version:',latest_pyarrow_version)
+            # create_virtualenv('./venv_', version, ['pyarrow=='+latest_pyarrow_version])
 
-t = Thread(target=log_on_regular_cadence,args=(1000000,300,))
-t.start()
-print('Background logging thread started')
+            if create_environments:
+                if version in ['0.2.7','0.2.8','0.2.9','0.3.0']:
+                    # Then pyarrow installation does not work (numpy failed to compile from source), so skip it
+                    create_virtualenv('./venv_', version, ['pandas=='+latest_pandas_version])
+                else:
+                    create_virtualenv('./venv_', version, ['pandas=='+latest_pandas_version, 'pyarrow=='+latest_pyarrow_version])
+            
+            if run_scripts:
+                start_time = time.perf_counter()
+                run_python_script('./venv_', version,'./benchmark_script.py')
 
-for version, details in versions.items().__reversed__():
-# for version, details in versions.items():
-    latest_pandas_version = con.execute(f"""
-        from pandas_versions 
-        select 
-            max_by(version,max_upload_time) as max_version
-        where
-            max_upload_time <= '{details['date']}'::datetime
-            and version not ilike '%rc%'
-        """).fetchall()[0][0]
+                logger.pprint(logger.get_results())
+                end_time = time.perf_counter()
+                print(f'Running script for version {version} took {round(end_time-start_time,1)} seconds')
 
-    latest_pyarrow_version = con.execute(f"""
-        from pyarrow_versions 
-        select 
-            max_by(version,max_upload_time) as max_version
-        where
-            max_upload_time <= '{details['date']}'::datetime
-        """).fetchall()[0][0]
-    
-    # # Pyarrow 5.0.0 is broken, and 4.0.1 does not compile numpy
-    # if latest_pyarrow_version == '5.0.0':
-    #     latest_pyarrow_version = '4.0.1'
-    # print('DuckDB version:',version,'Pandas version:',latest_pandas_version,'Pyarrow version:',latest_pyarrow_version)
-    # create_virtualenv('./venv_', version, ['pyarrow=='+latest_pyarrow_version])
-
-    if create_environments:
-        if version in ['0.2.7','0.2.8','0.2.9','0.3.0']:
-            # Then pyarrow installation does not work (numpy failed to compile from source), so skip it
-            create_virtualenv('./venv_', version, ['pandas=='+latest_pandas_version])
-        else:
-            create_virtualenv('./venv_', version, ['pandas=='+latest_pandas_version, 'pyarrow=='+latest_pyarrow_version])
-    
-    if run_scripts:
-        start_time = time.perf_counter()
-        run_python_script('./venv_', version,'./benchmark_script.py')
-
-        logger.pprint(logger.get_results())
-        end_time = time.perf_counter()
-        print(f'Running script for version {version} took {round(end_time-start_time,1)} seconds')
-
-stop_logging=True
-t.join()
+        stop_logging=True
+        t.join()
 

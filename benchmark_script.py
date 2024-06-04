@@ -10,16 +10,18 @@ from pathlib import Path
 from SQLiteLogger import SQLiteLogger
 
 repeat = 3
-versions_without_enums = ['0.2.7', '0.2.8', '0.2.9', '0.3.0', '0.3.1', '0.3.2', '0.3.3', '0.3.4', '0.4.0', '0.5.1']
+versions_without_enums = ['0.2.7', '0.2.8', '0.2.9', '0.3.0', '0.3.1', '0.3.2', '0.3.4', '0.4.0', '0.5.1']
 versions_without_pyarrow = ['0.2.7', '0.2.8', '0.2.9', '0.3.0']
 versions_without_window_ranges = ['0.2.7']
-versions_failing_on_quantiles_full_dataset = ['0.2.7', '0.2.8', '0.2.9', '0.3.0', '0.3.1', '0.3.2', '0.3.3', '0.3.4', '0.4.0', '0.5.1', '0.6.1', '0.7.1']
+versions_failing_on_quantiles_full_dataset = ['0.2.7', '0.2.8', '0.2.9', '0.3.0', '0.3.1', '0.3.2', '0.3.4', '0.4.0', '0.5.1', '0.6.1', '0.7.1']
 versions_failing_on_quantiles = ['0.2.7', '0.2.8', '0.2.9', '0.3.0', '0.3.1']
-test_performance = True
-test_window_performance = True
+versions_failing_on_1e9_group_by = ['0.2.7', '0.2.8', '0.2.9', '0.3.0',]
+test_performance = False
+test_window_performance = False
 test_scale = True
 
 def delete_database(filename):
+    """Delete .duckdb, .duckdb.wal, .duckdb.tmp and /tmp folder"""
     db_filename = filename + '.duckdb'
     try:
         os.remove(db_filename)
@@ -35,6 +37,13 @@ def delete_database(filename):
     tmp_filename = filename + '.duckdb.tmp'
     try:
         shutil.rmtree(tmp_filename)
+    except OSError:
+        pass
+
+    filepath = '/'.join(filename.split('/')[:-1])
+    temp_dir = filepath+'/tmp'
+    try:
+        shutil.rmtree(temp_dir)
     except OSError:
         pass
 
@@ -725,10 +734,18 @@ if test_window_performance:
 
 if test_scale:
     # Group by - see if we OOM!
-    csv_files = [
-        str(Path(venv_location).parent) + '/_data/G1_1e8_1e2_0_0.csv',
-        str(Path(venv_location).parent) + '/_data/G1_1e9_1e2_0_0.csv'
-    ]
+    venv_location = str(Path(sys.executable).parent.parent)
+    i = 0
+    duckdb_version, _ = get_duckdb_version_and_scenario()
+    if duckdb_version in versions_failing_on_1e9_group_by:
+        csv_files = [
+            str(Path(venv_location).parent) + '/_data/G1_1e8_1e2_0_0.csv',
+        ]
+    else:
+        csv_files = [
+            str(Path(venv_location).parent) + '/_data/G1_1e8_1e2_0_0.csv',
+            str(Path(venv_location).parent) + '/_data/G1_1e9_1e2_0_0.csv'
+        ]
     for csv_file in csv_files:
         try:
             duckdb_version, scenario = get_duckdb_version_and_scenario()
@@ -803,3 +820,5 @@ if test_scale:
         finally:
             con.close()
 
+db_filepath = venv_location+'/'+duckdb_version.replace('.','_')
+delete_database(db_filepath)

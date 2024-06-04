@@ -128,8 +128,8 @@ def log_on_regular_cadence(total_time, interval):
     end_time = time.time() + total_time
     while time.time() < end_time:
         logger.pprint(logger.get_results())
-        print(datetime.now().isoformat(sep=' '))
-        print('Elapsed time:',timedelta(seconds=time.perf_counter() - start_time_counter))
+        print(datetime.now().isoformat(sep=' '),flush=True)
+        print('Elapsed time:',timedelta(seconds=time.perf_counter() - start_time_counter),flush=True)
         if stop_logging:
             break
         time.sleep(interval)
@@ -150,7 +150,7 @@ shutil.move('benchmark_log_python.db','benchmark_log_python.db'.replace('.db',f'
 
 with open(filename, 'a') as f:
     with redirect_stdout(f):
-        print('Starting run')
+        print('Starting run',flush=True)
         # Deduce the correct pandas version
         con = duckdb.connect()
         pandas_versions = con.execute("from 'pandas_versions.csv'").df()
@@ -183,12 +183,13 @@ with open(filename, 'a') as f:
         # versions_to_test = ['0.2.7', '0.2.8', '0.2.9', '0.3.0', '0.3.1', '0.3.2', '0.3.4', '0.4.0', '0.5.1', '0.6.1', '0.7.1']
         # versions_to_test = ['0.2.7', '0.7.1', '0.8.1', '0.10.2']
         # versions_to_test = ['0.2.8','0.2.9','0.3.0']
-        # versions = {k: versions.get(k) for k in versions_to_test}
+        versions_to_test = ['0.2.7', '0.2.8', '0.2.9', '0.3.0',] # '0.3.1', '0.3.2', ] # '0.3.4', '0.4.0', '0.5.1', '0.6.1', '0.7.1',] # '0.8.1', '0.9.0',] # '0.9.1', '0.9.2',] # '0.10.0', '0.10.1', '0.10.2']
+        versions = {k: versions.get(k) for k in versions_to_test}
 
         # t = Thread(target=log_on_regular_cadence,args=(1000000,300,))
         t = Thread(target=log_on_regular_cadence,args=(1000000,10,))
         t.start()
-        print('Background logging thread started')
+        print('Background logging thread started',flush=True)
 
         for version, details in versions.items().__reversed__():
         # for version, details in versions.items():
@@ -228,7 +229,7 @@ with open(filename, 'a') as f:
 
                 logger.pprint(logger.get_results())
                 end_time = time.perf_counter()
-                print(f'Running script for version {version} took {round(end_time-start_time,1)} seconds')
+                print(f'Running script for version {version} took {round(end_time-start_time,1)} seconds',flush=True)
 
         stop_logging=True
         t.join()

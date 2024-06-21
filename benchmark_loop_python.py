@@ -58,6 +58,9 @@ versions = {
     '0.10.0': {'date':datetime.strptime('2024-02-13','%Y-%m-%d'),'osx-universal':True},
     '0.10.1': {'date':datetime.strptime('2024-03-18','%Y-%m-%d'),'osx-universal':True},
     '0.10.2': {'date':datetime.strptime('2024-04-17','%Y-%m-%d'),'osx-universal':True},
+    '0.10.3': {'date':datetime.strptime('2024-05-22','%Y-%m-%d'),'osx-universal':True},
+    '1.0.0': {'date':datetime.strptime('2024-06-03','%Y-%m-%d'),'osx-universal':True},
+    'latest': {'date':datetime.now(), 'osx-universal':True},
 }
 
 # First, install Python 3.9 if it isn't installed already
@@ -66,7 +69,7 @@ versions = {
 # Then, point to the right pip3 and install packages
 # Then, point to the right python and run a script with it
 # Then make a loop to do this for multiple
-def create_virtualenv(prefix, duckdb_version, libraries_list):
+def create_virtualenv(prefix, duckdb_version, libraries_list, local_duckdb_source=None):
     name = prefix + duckdb_version.replace('.','_')
     try:
         shutil.rmtree(name)
@@ -83,22 +86,57 @@ def create_virtualenv(prefix, duckdb_version, libraries_list):
     result = subprocess.run(commands, capture_output=True, text=True)
     print(result.stdout)
     print('Created virtual environment',name)
+    if duckdb_version == 'latest':
+        # Install DuckDB from source
+        # pip install -e tools/pythonpkg --verbose
+        print('Installing from source. Expect some delay and a warm CPU')
+        
+        commands = [
+            name+'/bin/pip3',
+            'install', 
+            '-e',
+            local_duckdb_source,
+            '--verbose',
+        ]
 
-    with open(f'{name}/bin/requirements.txt', 'w') as f:
-        f.writelines([
-            '\n'.join(libraries_list)+'\n',
-            'duckdb=='+version,
-        ])
+        print('|'+' '.join(commands)+'|')
+        latest_install_result = subprocess.run(commands, capture_output=True, text=True)
+        print(latest_install_result.stdout)
+        print('latest_install_result.stderr:\n', latest_install_result.stderr)
 
-    commands = [
-        name+'/bin/pip3',
-        'install', 
-        '-r',
-        name+'/bin/requirements.txt'
-    ]
+        # Install other libraries
+        with open(f'{name}/bin/requirements.txt', 'w') as f:
+            f.writelines([
+                '\n'.join(libraries_list)+'\n',
+            ])
 
-    print('|'+' '.join(commands)+'|')
-    result = subprocess.run(commands, capture_output=True, text=True)
+        commands = [
+            name+'/bin/pip3',
+            'install', 
+            '-r',
+            name+'/bin/requirements.txt'
+        ]
+
+        print('|'+' '.join(commands)+'|')
+        result = subprocess.run(commands, capture_output=True, text=True)
+
+    else:
+        with open(f'{name}/bin/requirements.txt', 'w') as f:
+            f.writelines([
+                '\n'.join(libraries_list)+'\n',
+                'duckdb=='+version,
+            ])
+
+        commands = [
+            name+'/bin/pip3',
+            'install', 
+            '-r',
+            name+'/bin/requirements.txt'
+        ]
+
+        print('|'+' '.join(commands)+'|')
+        result = subprocess.run(commands, capture_output=True, text=True)
+
     print(result.stdout)
     print('result.stderr:\n', result.stderr)
 
@@ -178,16 +216,20 @@ with open(filename, 'a') as f:
         # TODO: REMOVE. Filter down the versions for testing
         create_environments = False
         run_scripts = True
-        # versions_to_test = ['0.2.7']
+        # Note, need to run git pull in this repo before running this script to get the latest
+        local_duckdb_source = '/Users/alex/Documents/DuckDB/duckdb/tools/pythonpkg'
+        # versions_to_test = ['latest', '1.0.0', '0.10.3']
+        # versions_to_test = ['1.0.0', '0.10.3']
+        # versions_to_test = ['0.2.7', '0.2.8']
         # versions_to_test = ['0.3.1']
         # versions_to_test = ['0.2.7', '0.2.8', '0.2.9', '0.3.0', '0.3.1', '0.3.2', '0.3.4', '0.4.0', '0.5.1', '0.6.1', '0.7.1']
         # versions_to_test = ['0.2.7', '0.7.1', '0.8.1', '0.10.2']
         # versions_to_test = ['0.2.8','0.2.9','0.3.0']
-        versions_to_test = ['0.2.7', '0.2.8', '0.2.9', '0.3.0',] # '0.3.1', '0.3.2', ] # '0.3.4', '0.4.0', '0.5.1', '0.6.1', '0.7.1',] # '0.8.1', '0.9.0',] # '0.9.1', '0.9.2',] # '0.10.0', '0.10.1', '0.10.2']
-        versions = {k: versions.get(k) for k in versions_to_test}
+        # versions_to_test = ['0.2.7', '0.2.8', '0.2.9', '0.3.0',] # '0.3.1', '0.3.2', ] # '0.3.4', '0.4.0', '0.5.1', '0.6.1', '0.7.1',] # '0.8.1', '0.9.0',] # '0.9.1', '0.9.2',] # '0.10.0', '0.10.1', '0.10.2']
+        # versions = {k: versions.get(k) for k in versions_to_test}
 
         # t = Thread(target=log_on_regular_cadence,args=(1000000,300,))
-        t = Thread(target=log_on_regular_cadence,args=(1000000,10,))
+        t = Thread(target=log_on_regular_cadence,args=(1000000,30,))
         t.start()
         print('Background logging thread started',flush=True)
 
@@ -220,6 +262,8 @@ with open(filename, 'a') as f:
                 if version in ['0.2.7','0.2.8','0.2.9','0.3.0']:
                     # Then pyarrow installation does not work (numpy failed to compile from source), so skip it
                     create_virtualenv('./venv_', version, ['pandas=='+latest_pandas_version])
+                elif version == 'latest':
+                    create_virtualenv('./venv_', version, ['pandas=='+latest_pandas_version, 'pyarrow=='+latest_pyarrow_version], local_duckdb_source)
                 else:
                     create_virtualenv('./venv_', version, ['pandas=='+latest_pandas_version, 'pyarrow=='+latest_pyarrow_version])
             

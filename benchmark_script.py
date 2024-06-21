@@ -284,6 +284,16 @@ def export_join_to_arrow(con):
         result_table = "ans"+str(r)
         arrow_df = con.execute(f"select * from {result_table}").fetch_arrow_table()
 
+def export_join_to_parquet(con, venv_location):
+    # Write out group by results to parquet (from 2.5 seconds to 1.8 seconds in 0.10)
+    for r in range(1, 6):
+        result_table = "ans"+str(r)
+        parquet_file = str(Path(venv_location).parent) + f'/_data/join_{result_table}.parquet'
+        parquet_output = con.execute(f"COPY {result_table} to '{parquet_file}' (FORMAT PARQUET)").fetch_df()
+    # Return the final parquet file for next step
+    return parquet_file
+
+
 def ingest_windowing_csv(con, big_csv):
     # Load data for windowing queries
     create_table_queries_windowing = [
@@ -661,6 +671,9 @@ if test_performance:
                 time_and_log(export_join_to_arrow, con,
                         r=i, b='015 Export join results to Arrow', s=scenario, l=logger)
 
+            time_and_log(export_join_to_parquet, con, venv_location, 
+                        r=i, b='016 Export join results to Parquet', s=scenario, l=logger)
+
         except Exception as err:
             import traceback
             print("ERROR in duckdb_version",duckdb_version)
@@ -782,12 +795,12 @@ if test_scale:
             'medium_csv': str(Path(venv_location).parent) + '/_data/J1_1e8_1e5_0_0.csv',
             'big_csv': str(Path(venv_location).parent) + '/_data/J1_1e8_1e8_0_0.csv',
         },
-        # {
-        #     'x_csv' :str(Path(venv_location).parent) + '/_data/J1_1e9_NA_0_0.csv',
-        #     'small_csv': str(Path(venv_location).parent) + '/_data/J1_1e9_1e3_0_0.csv',
-        #     'medium_csv': str(Path(venv_location).parent) + '/_data/J1_1e9_1e6_0_0.csv',
-        #     'big_csv': str(Path(venv_location).parent) + '/_data/J1_1e9_1e9_0_0.csv',
-        # },
+        {
+            'x_csv' :str(Path(venv_location).parent) + '/_data/J1_1e9_NA_0_0.csv',
+            'small_csv': str(Path(venv_location).parent) + '/_data/J1_1e9_1e3_0_0.csv',
+            'medium_csv': str(Path(venv_location).parent) + '/_data/J1_1e9_1e6_0_0.csv',
+            'big_csv': str(Path(venv_location).parent) + '/_data/J1_1e9_1e9_0_0.csv',
+        },
     ]
     for csv_file_dict in join_csv_files:
         try:

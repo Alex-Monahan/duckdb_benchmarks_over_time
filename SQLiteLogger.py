@@ -54,7 +54,7 @@ class SQLiteLogger():
         for row in results:
             print_string += '\t' + str(row) + ',\n'
         print_string += ']' + '\n'
-        print(print_string)
+        print(print_string, flush=True)
 
 
 if __name__ == '__main__':
